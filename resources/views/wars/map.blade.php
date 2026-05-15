@@ -1,11 +1,8 @@
 <x-app-layout>
     <x-slot name="header">
-        <div class="flex items-center justify-between">
-            <h2 class="font-semibold text-xl text-gray-800 dark:text-gray-200 leading-tight">
-                {{ $war->name }} — {{ __('Map') }}
-            </h2>
-            <span class="text-sm text-gray-500 dark:text-gray-400">{{ $cities->count() }} {{ $cities->count() !== 1 ? __('Cities') : __('City') }}@if(!$cities->isEmpty()) @endif</span>
-        </div>
+        <h2 class="font-semibold text-xl text-gray-800 dark:text-gray-200 leading-tight">
+            {{ $war->name }} — {{ __('Map') }}
+        </h2>
     </x-slot>
 
     <div class="py-6">
@@ -13,13 +10,11 @@
             <div class="bg-white dark:bg-gray-800 shadow-sm sm:rounded-lg overflow-hidden">
                 <div id="map-area" class="relative w-full" style="height: 70vh;">
                     <div id="pixi-container" class="absolute inset-0"></div>
+
                     <div id="map-coords" class="absolute bottom-2 right-2 bg-black/60 text-white text-xs px-2 py-1 rounded select-none pointer-events-none z-10">
                         x: 0, y: 0
                     </div>
-                    <div id="map-zoom" class="absolute top-2 right-2 flex flex-col gap-1 z-10">
-                        <button id="zoom-in" class="bg-white dark:bg-gray-700 rounded-t px-3 py-1 text-lg font-bold hover:bg-gray-100 dark:hover:bg-gray-600 border border-gray-300 dark:border-gray-600 leading-none">+</button>
-                        <button id="zoom-out" class="bg-white dark:bg-gray-700 rounded-b px-3 py-1 text-lg font-bold hover:bg-gray-100 dark:hover:bg-gray-600 border-x border-b border-gray-300 dark:border-gray-600 leading-none">&minus;</button>
-                    </div>
+
                     <div id="map-legend" class="absolute bottom-2 left-2 bg-black/60 text-white text-xs px-2 py-1 rounded space-y-0.5 select-none pointer-events-none z-10">
                         <div class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm shrink-0" style="background:#90c96a"></span> {{ __('Plain') }}</div>
                         <div class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm shrink-0" style="background:#2d6a27"></span> {{ __('Forest') }}</div>
@@ -27,6 +22,27 @@
                         <div class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm shrink-0" style="background:#4a90d9"></span> {{ __('Water') }}</div>
                         <div class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm shrink-0" style="background:#e8d5a3"></span> {{ __('Desert') }}</div>
                         <div class="flex items-center gap-1.5 mt-1"><span class="w-2.5 h-2.5 rounded-full shrink-0" style="background:#f5a623"></span> {{ __('City') }}</div>
+                    </div>
+
+                    <div id="city-info" class="absolute top-1/2 right-4 -translate-y-1/2 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 p-4 pr-7 hidden min-w-[240px] text-sm text-gray-900 dark:text-gray-100 z-20">
+                        <button id="city-info-close" class="absolute top-1 right-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-lg leading-none">&times;</button>
+                        <div id="city-info-content"></div>
+                    </div>
+
+                    <div class="absolute top-2 right-2 flex flex-col gap-2 z-10">
+                        <div class="flex items-center gap-2 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 px-2.5 py-1.5">
+                            <span class="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">{{ $cities->count() }} {{ __('cities') }}</span>
+                            <select id="city-select" class="text-xs bg-transparent text-gray-900 dark:text-gray-100 border-0 cursor-pointer outline-none focus:ring-0">
+                                <option value="">{{ __('Center...') }}</option>
+                                @foreach($cities as $city)
+                                    <option value="{{ $city->id }}" data-x="{{ $city->tile_x }}" data-y="{{ $city->tile_y }}">{{ $city->name }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div class="flex self-end rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 shadow-sm">
+                            <button id="zoom-in" class="px-3 py-1 text-lg font-bold hover:bg-gray-100 dark:hover:bg-gray-600 leading-none border-r border-gray-300 dark:border-gray-600">+</button>
+                            <button id="zoom-out" class="px-3 py-1 text-lg font-bold hover:bg-gray-100 dark:hover:bg-gray-600 leading-none">&minus;</button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -64,6 +80,8 @@
     @push('scripts')
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/7.3.2/pixi.min.js"></script>
     <script>
+        const __i18n = (s) => s;
+
         document.addEventListener('DOMContentLoaded', async () => {
             const container = document.getElementById('pixi-container');
             const tilesUrl = "{{ route('api.wars.tiles', $war) }}";
@@ -145,6 +163,32 @@
             }
             worldContainer.addChild(gridGraphics);
 
+            const cityInfoEl = document.getElementById('city-info');
+            const cityInfoContent = document.getElementById('city-info-content');
+            const cityInfoClose = document.getElementById('city-info-close');
+
+            function showCityInfo(city) {
+                cityInfoContent.innerHTML = `
+                    <div class="font-semibold text-base mb-2">${city.name}</div>
+                    <div class="space-y-1 text-gray-600 dark:text-gray-300">
+                        <div class="flex justify-between"><span>${__i18n('Coordinates')}</span><span class="font-mono">(${city.tile_x}, ${city.tile_y})</span></div>
+                        <div class="flex justify-between"><span>${__i18n('Population')}</span><span>${city.population?.toLocaleString() || '0'}</span></div>
+                        <div class="flex justify-between"><span>${__i18n('Wood')}</span><span>${city.wood?.toLocaleString() || '0'}</span></div>
+                        <div class="flex justify-between"><span>${__i18n('Stone')}</span><span>${city.stone?.toLocaleString() || '0'}</span></div>
+                        <div class="flex justify-between"><span>${__i18n('Food')}</span><span>${city.food?.toLocaleString() || '0'}</span></div>
+                        <div class="flex justify-between"><span>${__i18n('Metal')}</span><span>${city.metal?.toLocaleString() || '0'}</span></div>
+                        ${city.owner_name ? `<div class="flex justify-between"><span>${__i18n('Owner')}</span><span>${city.owner_name}</span></div>` : ''}
+                    </div>
+                    <a href="${cityUrls[city.id]}" class="mt-3 block text-center text-sm font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 underline underline-offset-2">
+                        ${__i18n('View city details')} &rarr;
+                    </a>
+                `;
+                cityInfoEl.classList.remove('hidden');
+            }
+
+            cityInfoClose.onclick = () => cityInfoEl.classList.add('hidden');
+            cityInfoEl.addEventListener('click', (e) => { if (e.target === cityInfoEl) cityInfoEl.classList.add('hidden'); });
+
             for (const city of cities) {
                 const cx = city.tile_x * tileSize + tileSize / 2;
                 const cy = city.tile_y * tileSize + tileSize / 2;
@@ -171,8 +215,9 @@
                 cityContainer.addChild(cityGfx, label);
                 cityContainer.eventMode = 'static';
                 cityContainer.cursor = 'pointer';
-                cityContainer.on('pointerdown', () => {
-                    if (cityUrls[city.id]) window.location.href = cityUrls[city.id];
+                cityContainer.on('pointerdown', (e) => {
+                    e.stopPropagation();
+                    showCityInfo(city);
                 });
 
                 worldContainer.addChild(cityContainer);
@@ -246,11 +291,50 @@
                 zoomAt(e.deltaY > 0 ? 0.9 : 1.1, e.clientX - rect.left, e.clientY - rect.top);
             });
 
+            let pinchDist = 0;
+            app.view.addEventListener('touchstart', (e) => {
+                if (e.touches.length === 2) {
+                    e.preventDefault();
+                    const dx = e.touches[0].clientX - e.touches[1].clientX;
+                    const dy = e.touches[0].clientY - e.touches[1].clientY;
+                    pinchDist = Math.hypot(dx, dy);
+                }
+            }, { passive: false });
+            app.view.addEventListener('touchmove', (e) => {
+                if (e.touches.length === 2) {
+                    e.preventDefault();
+                    const dx = e.touches[0].clientX - e.touches[1].clientX;
+                    const dy = e.touches[0].clientY - e.touches[1].clientY;
+                    const dist = Math.hypot(dx, dy);
+                    if (pinchDist > 0) {
+                        const rect = app.view.getBoundingClientRect();
+                        const cx = (e.touches[0].clientX + e.touches[1].clientX) / 2 - rect.left;
+                        const cy = (e.touches[0].clientY + e.touches[1].clientY) / 2 - rect.top;
+                        zoomAt(dist / pinchDist, cx, cy);
+                    }
+                    pinchDist = dist;
+                }
+            }, { passive: false });
+            app.view.addEventListener('touchend', () => { pinchDist = 0; });
+
             document.getElementById('zoom-in').onclick = () => {
                 zoomAt(1.3, width / 2, height / 2);
             };
             document.getElementById('zoom-out').onclick = () => {
                 zoomAt(0.7, width / 2, height / 2);
+            };
+
+            document.getElementById('city-select').onchange = function () {
+                const option = this.options[this.selectedIndex];
+                const x = parseFloat(option.dataset.x);
+                const y = parseFloat(option.dataset.y);
+                if (!isNaN(x) && !isNaN(y)) {
+                    const targetX = x * tileSize + tileSize / 2;
+                    const targetY = y * tileSize + tileSize / 2;
+                    worldContainer.x = width / 2 - targetX * worldContainer.scale.x;
+                    worldContainer.y = height / 2 - targetY * worldContainer.scale.y;
+                }
+                this.selectedIndex = 0;
             };
 
             window.addEventListener('resize', () => {

@@ -29,6 +29,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/wars/{war}/armies', [ArmyController::class, 'index'])->name('armies.index');
     Route::post('/wars/{war}/armies/send', [ArmyController::class, 'send'])->name('armies.send');
     Route::get('/wars/{war}/cities/{city}', [CityController::class, 'show'])->name('cities.show');
+    Route::post('/wars/{war}/cities/{city}/rename', [CityController::class, 'rename'])->name('cities.rename');
 
     Route::get('/api/wars/{war}/tiles', [MapController::class, 'tiles'])->name('api.wars.tiles');
     Route::get('/api/wars/{war}/cities', [MapController::class, 'cities'])->name('api.wars.cities');

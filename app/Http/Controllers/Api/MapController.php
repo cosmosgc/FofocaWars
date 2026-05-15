@@ -34,9 +34,21 @@ class MapController extends Controller
     public function cities(War $war)
     {
         $cities = $war->cities()
-            ->with('owner')
-            ->get(['id', 'owner_id', 'name', 'tile_x', 'tile_y', 'population']);
+            ->with('owner.user')
+            ->get(['id', 'owner_id', 'name', 'tile_x', 'tile_y', 'population', 'wood', 'stone', 'food', 'metal']);
 
-        return response()->json($cities);
+        return response()->json($cities->map(fn($c) => [
+            'id' => $c->id,
+            'owner_id' => $c->owner_id,
+            'owner_name' => $c->owner?->user?->name,
+            'name' => $c->name,
+            'tile_x' => $c->tile_x,
+            'tile_y' => $c->tile_y,
+            'population' => $c->population,
+            'wood' => $c->wood,
+            'stone' => $c->stone,
+            'food' => $c->food,
+            'metal' => $c->metal,
+        ]));
     }
 }

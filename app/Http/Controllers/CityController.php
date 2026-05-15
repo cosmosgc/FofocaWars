@@ -8,6 +8,7 @@ use App\Models\Unit;
 use App\Models\UnitType;
 use App\Models\WarPlayer;
 use App\Game\Economy\ResourceService;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
 class CityController extends Controller
@@ -30,5 +31,22 @@ class CityController extends Controller
             ->get();
 
         return view('cities.show', compact('war', 'city', 'rates', 'player', 'unitTypes', 'cityUnits'));
+    }
+
+    public function rename(War $war, City $city, Request $request)
+    {
+        $player = WarPlayer::where('war_id', $war->id)
+            ->where('user_id', Auth::id())
+            ->firstOrFail();
+
+        abort_if($city->war_id !== $war->id || $city->owner_id !== $player->id, 403);
+
+        $validated = $request->validate([
+            'name' => 'required|string|max:50',
+        ]);
+
+        $city->update(['name' => $validated['name']]);
+
+        return response()->json(['message' => 'City renamed.']);
     }
 }

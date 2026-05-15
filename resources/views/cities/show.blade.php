@@ -1,9 +1,21 @@
 <x-app-layout>
     <x-slot name="header">
-        <div class="flex items-center gap-4">
-            <h2 class="font-semibold text-xl text-gray-800 dark:text-gray-200 leading-tight">
-                {{ $city->name }}
-            </h2>
+        <div class="flex items-center gap-4" x-data="renameCity('{{ route('cities.rename', [$war, $city]) }}', '{{ $city->name }}')">
+            <template x-if="!editing">
+                <div class="flex items-center gap-2">
+                    <h2 class="font-semibold text-xl text-gray-800 dark:text-gray-200 leading-tight" x-text="name"></h2>
+                    <button @click="editing = true" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-sm">✏️</button>
+                </div>
+            </template>
+            <template x-if="editing">
+                <form class="flex items-center gap-2" @submit.prevent="submit()">
+                    <input type="text" x-model="name"
+                           class="border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 rounded-md shadow-sm text-lg font-semibold px-2 py-1">
+                    <button type="submit" class="text-green-600 hover:text-green-500 text-sm font-medium">Save</button>
+                    <button @click="cancel()" type="button" class="text-gray-400 hover:text-gray-600 text-sm">Cancel</button>
+                    <span x-show="msg" x-text="msg" class="text-sm" :class="err ? 'text-red-600' : 'text-green-600'"></span>
+                </form>
+            </template>
             <span class="text-sm text-gray-500 dark:text-gray-400">
                 ({{ $city->tile_x }}, {{ $city->tile_y }})
             </span>
@@ -149,6 +161,27 @@
 
     @push('scripts')
     <script>
+        function renameCity(url, originalName) {
+            return {
+                editing: false, name: originalName, original: originalName, msg: '', err: false,
+                cancel() { this.name = this.original; this.editing = false; this.msg = ''; },
+                async submit() {
+                    if (!this.name.trim() || this.name === this.original) { this.editing = false; return; }
+                    this.msg = ''; this.err = false;
+                    try {
+                        const res = await fetch(url, {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json', 'X-CSRF-TOKEN': '{{ csrf_token() }}'},
+                            body: JSON.stringify({name: this.name})
+                        });
+                        const data = await res.json();
+                        if (!res.ok) { this.err = true; this.msg = data.error || 'Error'; }
+                        else { this.original = this.name; this.msg = ''; this.editing = false; }
+                    } catch(e) { this.err = true; this.msg = 'Request failed.'; }
+                },
+            };
+        }
+
         function cityTrain(cityId, trainUrl, queueUrl) {
             return {
                 qty: 1, message: '', error: false, busy: null, queue: [],
