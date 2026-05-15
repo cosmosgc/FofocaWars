@@ -78,8 +78,6 @@ class WarController extends Controller
             $tile->update(['owner_id' => $player->id, 'structure_id' => 'city']);
         });
 
-        $war->update(['status' => 'running']);
-
         return redirect()->route('wars.show', $war);
     }
 

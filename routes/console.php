@@ -10,3 +10,5 @@ Artisan::command('inspire', function () {
 })->purpose('Display an inspiring quote');
 
 Schedule::command('game:tick-resources')->everyMinute();
+Schedule::command('game:tick-armies')->everyMinute();
+Schedule::command('game:tick-training')->everyMinute();

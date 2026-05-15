@@ -3,6 +3,7 @@
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\WarController;
 use App\Http\Controllers\CityController;
+use App\Http\Controllers\ArmyController;
 use App\Http\Controllers\Api\MapController;
 use App\Http\Controllers\Api\ResourceController;
 use Illuminate\Support\Facades\Route;
@@ -25,11 +26,19 @@ Route::middleware('auth')->group(function () {
     Route::post('/wars/{war}/join', [WarController::class, 'join'])->name('wars.join');
     Route::post('/wars/{war}/start', [WarController::class, 'start'])->name('wars.start');
     Route::get('/wars/{war}/map', [WarController::class, 'map'])->name('wars.map');
+    Route::get('/wars/{war}/armies', [ArmyController::class, 'index'])->name('armies.index');
+    Route::post('/wars/{war}/armies/send', [ArmyController::class, 'send'])->name('armies.send');
     Route::get('/wars/{war}/cities/{city}', [CityController::class, 'show'])->name('cities.show');
 
     Route::get('/api/wars/{war}/tiles', [MapController::class, 'tiles'])->name('api.wars.tiles');
     Route::get('/api/wars/{war}/cities', [MapController::class, 'cities'])->name('api.wars.cities');
     Route::get('/api/wars/{war}/resources', [ResourceController::class, 'index'])->name('api.wars.resources');
+    Route::get('/api/wars/{war}/armies/movements', [\App\Http\Controllers\Api\ArmyController::class, 'movements'])->name('api.wars.armies.movements');
+    Route::get('/api/wars/{war}/unit-types', [\App\Http\Controllers\Api\ArmyController::class, 'unitTypes'])->name('api.wars.unit-types');
+    Route::get('/api/wars/{war}/cities/{city}/units', [\App\Http\Controllers\Api\ArmyController::class, 'cityUnits'])->name('api.wars.city-units');
+    Route::post('/api/wars/{war}/train', [\App\Http\Controllers\Api\ArmyController::class, 'train'])->name('api.wars.train');
+    Route::get('/api/wars/{war}/training-queue', [\App\Http\Controllers\Api\ArmyController::class, 'trainingQueue'])->name('api.wars.training-queue');
+    Route::get('/api/wars/{war}/battles/reports', [\App\Http\Controllers\Api\BattleController::class, 'reports'])->name('api.wars.battles.reports');
 
     Route::middleware('admin')->prefix('admin')->name('admin.')->group(function () {
         Route::get('/wars', [\App\Http\Controllers\Admin\WarController::class, 'index'])->name('wars.index');
