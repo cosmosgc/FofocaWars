@@ -21,6 +21,7 @@ class ResourceController extends Controller
         $cities = City::where('war_id', $war->id)
             ->where('owner_id', $player->id)
             ->get()
+            ->each(fn($city) => $service->syncCity($city, $war))
             ->map(fn($city) => array_merge(
                 $city->only(['id', 'name', 'wood', 'stone', 'food', 'metal', 'population', 'max_wood', 'max_stone', 'max_food', 'max_metal']),
                 ['url' => route('cities.show', [$war, $city])]

@@ -15,9 +15,16 @@
                     <x-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')">
                         {{ __('Dashboard') }}
                     </x-nav-link>
-                    <x-nav-link :href="route('wars.index')" :active="request()->routeIs('wars.*')">
+                    <x-nav-link :href="route('wars.index')" :active="request()->routeIs('wars.*') && !request()->routeIs('admin.*')">
                         {{ __('Wars') }}
                     </x-nav-link>
+                    @auth
+                        @if(auth()->user()->isAdmin())
+                            <x-nav-link :href="route('admin.wars.index')" :active="request()->routeIs('admin.*')">
+                                {{ __('Admin') }}
+                            </x-nav-link>
+                        @endif
+                    @endauth
                 </div>
             </div>
 
@@ -73,9 +80,16 @@
             <x-responsive-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')">
                 {{ __('Dashboard') }}
             </x-responsive-nav-link>
-            <x-responsive-nav-link :href="route('wars.index')" :active="request()->routeIs('wars.*')">
+            <x-responsive-nav-link :href="route('wars.index')" :active="request()->routeIs('wars.*') && !request()->routeIs('admin.*')">
                 {{ __('Wars') }}
             </x-responsive-nav-link>
+            @auth
+                @if(auth()->user()->isAdmin())
+                    <x-responsive-nav-link :href="route('admin.wars.index')" :active="request()->routeIs('admin.*')">
+                        {{ __('Admin') }}
+                    </x-responsive-nav-link>
+                @endif
+            @endauth
         </div>
 
         <!-- Responsive Settings Options -->

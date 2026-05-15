@@ -18,6 +18,7 @@ class CityController extends Controller
 
         abort_if($city->war_id !== $war->id || $city->owner_id !== $player->id, 403);
 
+        $service->syncCity($city, $war);
         $rates = $service->getProductionRates($war);
 
         return view('cities.show', compact('war', 'city', 'rates', 'player'));

@@ -76,5 +76,21 @@
     "Resource Multiplier": "Multiplicador de Recursos",
     "Construction Speed": "Velocidade de Construção",
     "Troop Speed": "Velocidade de Tropas",
-    "Max Bases": "Máx. Bases"
+    "Max Bases": "Máx. Bases",
+    "Admin": "Admin",
+    "Name": "Nome",
+    "Players": "Jogadores",
+    "Actions": "Ações",
+    "Edit": "Editar",
+    "Start": "Iniciar",
+    "Delete": "Excluir",
+    "Save": "Salvar",
+    "Back": "Voltar",
+    "Edit War": "Editar Guerra",
+    "No wars created yet.": "Nenhuma guerra criada ainda.",
+    "War updated successfully.": "Guerra atualizada com sucesso.",
+    "War deleted successfully.": "Guerra excluída com sucesso.",
+    "setup": "configuração",
+    "running": "em andamento",
+    "ended": "encerrado"
 }

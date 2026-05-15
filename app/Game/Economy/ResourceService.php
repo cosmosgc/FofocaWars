@@ -35,14 +35,21 @@ class ResourceService
         $city->save();
     }
 
-    public function getFillPercentages(City $city): array
+    public function syncCity(City $city, War $war): void
     {
-        return [
-            'wood' => $city->max_wood > 0 ? round(($city->wood / $city->max_wood) * 100) : 0,
-            'stone' => $city->max_stone > 0 ? round(($city->stone / $city->max_stone) * 100) : 0,
-            'food' => $city->max_food > 0 ? round(($city->food / $city->max_food) * 100) : 0,
-            'metal' => $city->max_metal > 0 ? round(($city->metal / $city->max_metal) * 100) : 0,
-        ];
+        $multiplier = (float) $war->resource_multiplier;
+        $elapsedMinutes = $city->updated_at->diffInMinutes(now(), false);
+
+        if ($elapsedMinutes <= 0) {
+            return;
+        }
+
+        $city->wood = min($city->max_wood, $city->wood + (int) round($this->baseProduction['wood'] * $multiplier * $elapsedMinutes));
+        $city->stone = min($city->max_stone, $city->stone + (int) round($this->baseProduction['stone'] * $multiplier * $elapsedMinutes));
+        $city->food = min($city->max_food, $city->food + (int) round($this->baseProduction['food'] * $multiplier * $elapsedMinutes));
+        $city->metal = min($city->max_metal, $city->metal + (int) round($this->baseProduction['metal'] * $multiplier * $elapsedMinutes));
+
+        $city->save();
     }
 
     public function getProductionRates(War $war): array

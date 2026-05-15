@@ -13,12 +13,14 @@
     <div class="py-12">
         <div class="max-w-4xl mx-auto sm:px-6 lg:px-8 space-y-6">
             <div class="bg-white dark:bg-gray-800 overflow-hidden shadow-sm sm:rounded-lg">
-                <div class="p-6">
+                <div class="p-6"
+                     x-data="cityResources('{{ route('api.wars.resources', $war) }}', {{ $city->id }}, {{ $city->wood }}, {{ $city->stone }}, {{ $city->food }}, {{ $city->metal }}, {{ $city->max_wood }}, {{ $city->max_stone }}, {{ $city->max_food }}, {{ $city->max_metal }}, {{ $city->population }}, {{ $rates['wood'] }}, {{ $rates['stone'] }}, {{ $rates['food'] }}, {{ $rates['metal'] }})"
+                     x-init="init()">
                     <div class="flex items-center justify-between mb-4">
                         <div>
                             <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">{{ __('Resources') }}</h3>
                             <p class="text-sm text-gray-500 dark:text-gray-400">
-                                {{ __('Population') }}: {{ number_format($city->population) }}
+                                {{ __('Population') }}: <span x-text="format(population)" class="font-medium">0</span>
                             </p>
                         </div>
                         <a href="{{ route('wars.map', $war) }}"
@@ -27,64 +29,25 @@
                         </a>
                     </div>
 
-                    @php $pct = app(App\Game\Economy\ResourceService::class)->getFillPercentages($city); @endphp
                     <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <div class="border dark:border-gray-700 rounded-lg p-4">
-                            <div class="flex items-baseline justify-between">
-                                <div class="text-2xl font-bold text-gray-900 dark:text-gray-100">{{ number_format($city->wood) }}</div>
-                                <div class="text-sm text-gray-500 dark:text-gray-400">/ {{ number_format($city->max_wood) }}</div>
+                        <template x-for="r in ['wood','stone','food','metal']" :key="r">
+                            <div class="border dark:border-gray-700 rounded-lg p-4">
+                                <div class="flex items-baseline justify-between">
+                                    <div class="text-2xl font-bold text-gray-900 dark:text-gray-100" x-text="format(display[r])">0</div>
+                                    <div class="text-sm text-gray-500 dark:text-gray-400" x-text="'/' + format(max[r])">/ 0</div>
+                                </div>
+                                <div class="text-sm text-gray-500 dark:text-gray-400" x-text="labels[r]"></div>
+                                <div class="mt-2 w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                                    <div class="h-2 rounded-full transition-all"
+                                         :class="barColors[r]"
+                                         :style="'width:' + Math.min(100, max[r] > 0 ? (display[r] / max[r] * 100) : 0) + '%'"></div>
+                                </div>
+                                <div class="flex justify-between text-xs mt-1">
+                                    <span class="text-green-600 dark:text-green-400">+<span x-text="ratePerSec[r]"></span>/s</span>
+                                    <span class="text-gray-500 dark:text-gray-400" x-text="Math.min(100, max[r] > 0 ? Math.round(display[r] / max[r] * 100) : 0) + '%'"></span>
+                                </div>
                             </div>
-                            <div class="text-sm text-gray-500 dark:text-gray-400">{{ __('Wood') }}</div>
-                            <div class="mt-2 w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                                <div class="bg-amber-600 h-2 rounded-full transition-all" style="width: {{ $pct['wood'] }}%"></div>
-                            </div>
-                            <div class="flex justify-between text-xs mt-1">
-                                <span class="text-green-600 dark:text-green-400">+{{ $rates['wood'] }}{{ __('/min') }}</span>
-                                <span class="text-gray-500 dark:text-gray-400">{{ $pct['wood'] }}%</span>
-                            </div>
-                        </div>
-                        <div class="border dark:border-gray-700 rounded-lg p-4">
-                            <div class="flex items-baseline justify-between">
-                                <div class="text-2xl font-bold text-gray-900 dark:text-gray-100">{{ number_format($city->stone) }}</div>
-                                <div class="text-sm text-gray-500 dark:text-gray-400">/ {{ number_format($city->max_stone) }}</div>
-                            </div>
-                            <div class="text-sm text-gray-500 dark:text-gray-400">{{ __('Stone') }}</div>
-                            <div class="mt-2 w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                                <div class="bg-gray-400 h-2 rounded-full transition-all" style="width: {{ $pct['stone'] }}%"></div>
-                            </div>
-                            <div class="flex justify-between text-xs mt-1">
-                                <span class="text-green-600 dark:text-green-400">+{{ $rates['stone'] }}{{ __('/min') }}</span>
-                                <span class="text-gray-500 dark:text-gray-400">{{ $pct['stone'] }}%</span>
-                            </div>
-                        </div>
-                        <div class="border dark:border-gray-700 rounded-lg p-4">
-                            <div class="flex items-baseline justify-between">
-                                <div class="text-2xl font-bold text-gray-900 dark:text-gray-100">{{ number_format($city->food) }}</div>
-                                <div class="text-sm text-gray-500 dark:text-gray-400">/ {{ number_format($city->max_food) }}</div>
-                            </div>
-                            <div class="text-sm text-gray-500 dark:text-gray-400">{{ __('Food') }}</div>
-                            <div class="mt-2 w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                                <div class="bg-green-500 h-2 rounded-full transition-all" style="width: {{ $pct['food'] }}%"></div>
-                            </div>
-                            <div class="flex justify-between text-xs mt-1">
-                                <span class="text-green-600 dark:text-green-400">+{{ $rates['food'] }}{{ __('/min') }}</span>
-                                <span class="text-gray-500 dark:text-gray-400">{{ $pct['food'] }}%</span>
-                            </div>
-                        </div>
-                        <div class="border dark:border-gray-700 rounded-lg p-4">
-                            <div class="flex items-baseline justify-between">
-                                <div class="text-2xl font-bold text-gray-900 dark:text-gray-100">{{ number_format($city->metal) }}</div>
-                                <div class="text-sm text-gray-500 dark:text-gray-400">/ {{ number_format($city->max_metal) }}</div>
-                            </div>
-                            <div class="text-sm text-gray-500 dark:text-gray-400">{{ __('Metal') }}</div>
-                            <div class="mt-2 w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                                <div class="bg-cyan-600 h-2 rounded-full transition-all" style="width: {{ $pct['metal'] }}%"></div>
-                            </div>
-                            <div class="flex justify-between text-xs mt-1">
-                                <span class="text-green-600 dark:text-green-400">+{{ $rates['metal'] }}{{ __('/min') }}</span>
-                                <span class="text-gray-500 dark:text-gray-400">{{ $pct['metal'] }}%</span>
-                            </div>
-                        </div>
+                        </template>
                     </div>
                 </div>
             </div>
@@ -122,4 +85,78 @@
             </div>
         </div>
     </div>
+
+    @push('scripts')
+    <script>
+        function cityResources(url, cityId, w, s, f, m, mw, ms, mf, mm, pop, rw, rs, rf, rm) {
+            return {
+                base: { wood: w, stone: s, food: f, metal: m },
+                display: { wood: w, stone: s, food: f, metal: m },
+                max: { wood: mw, stone: ms, food: mf, metal: mm },
+                population: pop,
+                rates: { wood: rw, stone: rs, food: rf, metal: rm },
+                ratePerSec: { wood: rw / 60, stone: rs / 60, food: rf / 60, metal: rm / 60 },
+                lastFetch: Date.now(),
+                labels: { wood: '{{ __("Wood") }}', stone: '{{ __("Stone") }}', food: '{{ __("Food") }}', metal: '{{ __("Metal") }}' },
+                barColors: { wood: 'bg-amber-600', stone: 'bg-gray-400', food: 'bg-green-500', metal: 'bg-cyan-600' },
+                interval: null,
+                tickId: null,
+
+                init() {
+                    this.fetch();
+                    this.interval = setInterval(() => this.fetch(), 15000);
+                    this.tickId = setInterval(() => this.simulate(), 1000);
+                },
+
+                simulate() {
+                    const now = Date.now();
+                    const elapsed = (now - this.lastFetch) / 1000;
+                    for (const r of ['wood', 'stone', 'food', 'metal']) {
+                        const produced = this.ratePerSec[r] * elapsed;
+                        this.display[r] = Math.min(this.max[r], this.base[r] + produced);
+                    }
+                },
+
+                async fetch() {
+                    try {
+                        const res = await fetch(url);
+                        const data = await res.json();
+                        const city = data.cities.find(c => c.id === cityId);
+                        if (city) {
+                            this.base = {
+                                wood: city.wood,
+                                stone: city.stone,
+                                food: city.food,
+                                metal: city.metal,
+                            };
+                            this.max = {
+                                wood: city.max_wood,
+                                stone: city.max_stone,
+                                food: city.max_food,
+                                metal: city.max_metal,
+                            };
+                            this.population = city.population;
+                            this.lastFetch = Date.now();
+                        }
+                        this.rates = data.rates;
+                        this.ratePerSec = {
+                            wood: data.rates.wood / 60,
+                            stone: data.rates.stone / 60,
+                            food: data.rates.food / 60,
+                            metal: data.rates.metal / 60,
+                        };
+                    } catch (e) {
+                        console.error('Failed to fetch resources:', e);
+                    }
+                },
+
+                format(n) { return Math.floor(n).toLocaleString(); },
+                destroy() {
+                    if (this.interval) clearInterval(this.interval);
+                    if (this.tickId) clearInterval(this.tickId);
+                }
+            };
+        }
+    </script>
+    @endpush
 </x-app-layout>

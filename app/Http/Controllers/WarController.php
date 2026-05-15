@@ -67,7 +67,7 @@ class WarController extends Controller
                     ->first();
             }
 
-            $city = $war->cities()->create([
+            $war->cities()->create([
                 'owner_id' => $player->id,
                 'name' => 'Capital',
                 'tile_x' => $tile->x,
@@ -78,7 +78,19 @@ class WarController extends Controller
             $tile->update(['owner_id' => $player->id, 'structure_id' => 'city']);
         });
 
+        $war->update(['status' => 'running']);
+
         return redirect()->route('wars.show', $war);
+    }
+
+    public function start(War $war)
+    {
+        if (!Auth::user()->isAdmin()) {
+            abort(403);
+        }
+
+        $war->update(['status' => 'running']);
+        return back()->with('success', 'War started.');
     }
 
     public function map(War $war)
