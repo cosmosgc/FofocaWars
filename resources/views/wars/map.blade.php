@@ -86,6 +86,7 @@
             const container = document.getElementById('pixi-container');
             const tilesUrl = "{{ route('api.wars.tiles', $war) }}";
             const citiesUrl = "{{ route('api.wars.cities', $war) }}";
+            const movementsUrl = "{{ route('api.wars.armies.map-movements', $war) }}";
             const cityUrls = @json($cities->mapWithKeys(fn($c) => [$c->id => route('cities.show', [$war, $c])]));
             const coordsEl = document.getElementById('map-coords');
             const width = container.clientWidth;
@@ -116,14 +117,17 @@
 
             let tiles = [];
             let cities = [];
+            let movements = [];
 
             try {
-                const [tilesRes, citiesRes] = await Promise.all([
+                const [tilesRes, citiesRes, movRes] = await Promise.all([
                     fetch(tilesUrl),
                     fetch(citiesUrl),
+                    fetch(movementsUrl),
                 ]);
                 tiles = await tilesRes.json();
                 cities = await citiesRes.json();
+                movements = await movRes.json();
             } catch (e) {
                 console.error('Failed to load map data:', e);
                 container.innerHTML = '<p class="text-red-500 p-4">Failed to load map data.</p>';
@@ -222,6 +226,63 @@
 
                 worldContainer.addChild(cityContainer);
             }
+
+            const movContainer = new PIXI.Container();
+            worldContainer.addChild(movContainer);
+            let movDots = [];
+
+            function rebuildMovements() {
+                movContainer.removeChildren();
+                movDots = [];
+                for (const m of movements) {
+                    const ox = m.origin.x * tileSize + tileSize / 2;
+                    const oy = m.origin.y * tileSize + tileSize / 2;
+                    const tx = m.target.x * tileSize + tileSize / 2;
+                    const ty = m.target.y * tileSize + tileSize / 2;
+
+                    const line = new PIXI.Graphics();
+                    line.lineStyle(2, 0xff4444, 0.5);
+                    line.moveTo(ox, oy);
+                    line.lineTo(tx, ty);
+                    movContainer.addChild(line);
+
+                    const dot = new PIXI.Graphics();
+                    dot.beginFill(0xff4444);
+                    dot.drawCircle(0, 0, 5);
+                    dot.endFill();
+                    dot.beginFill(0xffffff, 0.3);
+                    dot.drawCircle(0, 0, 10);
+                    dot.endFill();
+
+                    m._ox = ox; m._oy = oy; m._tx = tx; m._ty = ty;
+                    m._start = new Date(m.created_at).getTime();
+                    m._end = new Date(m.arrival_at).getTime();
+                    m._total = m._end - m._start;
+
+                    movContainer.addChild(dot);
+                    movDots.push({ dot, m });
+                }
+            }
+
+            rebuildMovements();
+
+            app.ticker.add(() => {
+                const now = Date.now();
+                for (const { dot, m } of movDots) {
+                    const p = m._total > 0 ? Math.min(1, Math.max(0, (now - m._start) / m._total)) : 0;
+                    dot.x = m._ox + (m._tx - m._ox) * p;
+                    dot.y = m._oy + (m._ty - m._oy) * p;
+                    dot.alpha = p < 1 ? 1 : 0.3;
+                }
+            });
+
+            setInterval(async () => {
+                try {
+                    const r = await fetch(movementsUrl);
+                    movements = await r.json();
+                    rebuildMovements();
+                } catch(e) {}
+            }, 15000);
 
             if (cities.length > 0) {
                 const firstCity = cities[0];

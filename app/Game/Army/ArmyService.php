@@ -12,9 +12,9 @@ use Illuminate\Support\Facades\DB;
 
 class ArmyService
 {
-    public function sendArmy(City $origin, City $target, array $units, War $war): Army
+    public function sendArmy(City $origin, City $target, array $units, War $war, string $mission = 'attack'): Army
     {
-        return DB::transaction(function () use ($origin, $target, $units, $war) {
+        return DB::transaction(function () use ($origin, $target, $units, $war, $mission) {
             $distance = $this->calculateDistance($origin, $target);
             $speed = $this->calculateSpeed($units, $war);
             $travelMinutes = $distance / max($speed, 1);
@@ -25,6 +25,7 @@ class ArmyService
                 'origin_city_id' => $origin->id,
                 'target_city_id' => $target->id,
                 'status' => 'marching',
+                'mission' => $mission,
                 'arrival_at' => now()->addMinutes(max(1, (int) ceil($travelMinutes))),
             ]);
 
@@ -64,6 +65,11 @@ class ArmyService
 
     public function resolveArrival(Army $army, War $war): void
     {
+        if ($army->mission === 'reinforce') {
+            $this->reinforce($army);
+            return;
+        }
+
         $targetCity = $army->targetCity;
         $defenderUnits = Unit::where('city_id', $targetCity->id)
             ->where('quantity', '>', 0)
@@ -77,6 +83,27 @@ class ArmyService
         } else {
             $this->occupy($army, $targetCity);
         }
+    }
+
+    public function reinforce(Army $army): void
+    {
+        DB::transaction(function () use ($army) {
+            $army->update(['status' => 'stationed']);
+        });
+    }
+
+    public function recallGarrison(Army $army): void
+    {
+        if ($army->mission !== 'reinforce' || $army->status !== 'stationed') return;
+
+        $distance = $this->calculateDistance($army->originCity, $army->targetCity);
+        $speed = $this->calculateSpeedForArmy($army);
+        $travelMinutes = $distance / max($speed, 1);
+
+        $army->update([
+            'status' => 'returning',
+            'arrival_at' => now()->addMinutes(max(1, (int) ceil($travelMinutes))),
+        ]);
     }
 
     public function occupy(Army $army, City $city): void
@@ -113,6 +140,17 @@ class ArmyService
             ->where('status', 'stationed')
             ->with('units.unitType')
             ->get();
+    }
+
+    public function calculateSpeedForArmy(Army $army): float
+    {
+        $totalSpeed = 0;
+        $totalQty = 0;
+        foreach ($army->units as $au) {
+            $totalSpeed += $au->unitType->speed * $au->quantity;
+            $totalQty += $au->quantity;
+        }
+        return $totalQty > 0 ? $totalSpeed / $totalQty : 1;
     }
 
     public function calculateDistance(City $a, City $b): float

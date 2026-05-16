@@ -101,6 +101,7 @@ test('user can send army to another city', function () {
         'origin_city_id' => $city->id,
         'target_city_id' => $target->id,
         'units' => [$unitType->id => 4],
+        'mission' => 'attack',
     ]);
 
     $response->assertSessionHasNoErrors();

@@ -22,6 +22,16 @@ class ArmyController extends Controller
             ->where('user_id', Auth::id())
             ->firstOrFail();
 
+        $arrived = Army::where('war_id', $war->id)
+            ->where('owner_id', $player->id)
+            ->where('status', 'marching')
+            ->where('arrival_at', '<=', now())
+            ->get();
+
+        foreach ($arrived as $army) {
+            app(\App\Game\Army\ArmyService::class)->resolveArrival($army, $war);
+        }
+
         $armies = Army::where('war_id', $war->id)
             ->where('owner_id', $player->id)
             ->whereIn('status', ['marching', 'returning'])
@@ -33,6 +43,27 @@ class ArmyController extends Controller
                 'origin' => ['x' => $army->originCity->tile_x, 'y' => $army->originCity->tile_y],
                 'target' => ['x' => $army->targetCity->tile_x, 'y' => $army->targetCity->tile_y],
                 'arrival_at' => $army->arrival_at,
+                'created_at' => $army->created_at,
+            ]);
+    }
+
+    public function mapMovements(War $war)
+    {
+        $armies = Army::where('war_id', $war->id)
+            ->where('status', 'marching')
+            ->with(['originCity', 'targetCity', 'units.unitType'])
+            ->get()
+            ->map(fn($army) => [
+                'id' => $army->id,
+                'owner_id' => $army->owner_id,
+                'origin' => ['x' => $army->originCity->tile_x, 'y' => $army->originCity->tile_y],
+                'target' => ['x' => $army->targetCity->tile_x, 'y' => $army->targetCity->tile_y],
+                'arrival_at' => $army->arrival_at,
+                'created_at' => $army->created_at,
+                'units' => $army->units->map(fn($au) => [
+                    'name' => $au->unitType->name,
+                    'quantity' => $au->quantity,
+                ]),
             ]);
 
         return response()->json($armies);
@@ -98,6 +129,19 @@ class ArmyController extends Controller
 
         $cities = City::where('war_id', $war->id)->where('owner_id', $player->id)->pluck('id');
 
+        $finished = TrainingQueue::whereIn('city_id', $cities)
+            ->where('finishes_at', '<=', now())
+            ->get();
+
+        foreach ($finished as $entry) {
+            $unit = Unit::firstOrCreate(
+                ['city_id' => $entry->city_id, 'unit_type_id' => $entry->unit_type_id],
+                ['quantity' => 0]
+            );
+            $unit->increment('quantity', $entry->quantity);
+            $entry->delete();
+        }
+
         $queue = TrainingQueue::whereIn('city_id', $cities)
             ->with('unitType')
             ->get()
@@ -110,6 +154,31 @@ class ArmyController extends Controller
             ]);
 
         return response()->json($queue);
+    }
+
+    public function garrisons(War $war)
+    {
+        $player = WarPlayer::where('war_id', $war->id)
+            ->where('user_id', Auth::id())
+            ->firstOrFail();
+
+        $garrisons = Army::where('war_id', $war->id)
+            ->where('owner_id', $player->id)
+            ->where('status', 'stationed')
+            ->where('mission', 'reinforce')
+            ->with(['units.unitType', 'targetCity'])
+            ->get()
+            ->map(fn($a) => [
+                'id' => $a->id,
+                'target_name' => $a->targetCity->name,
+                'units' => $a->units->map(fn($au) => [
+                    'name' => $au->unitType->name,
+                    'quantity' => $au->quantity,
+                ]),
+                'recall_url' => route('armies.recall', [$war, $a]),
+            ]);
+
+        return response()->json($garrisons);
     }
 
     public function train(War $war, Request $request)

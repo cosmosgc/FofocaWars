@@ -10,7 +10,7 @@ class Army extends Model
 {
     protected $fillable = [
         'war_id', 'owner_id', 'origin_city_id', 'target_city_id',
-        'status', 'arrival_at',
+        'status', 'mission', 'arrival_at',
     ];
 
     protected function casts(): array

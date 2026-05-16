@@ -78,6 +78,18 @@ class BattleService
             $power += ($unit->unitType->defense + $unit->unitType->attack * 0.5) * $unit->quantity;
         }
 
+        $garrisons = \App\Models\Army::where('target_city_id', $city->id)
+            ->where('status', 'stationed')
+            ->where('mission', 'reinforce')
+            ->with('units.unitType')
+            ->get();
+
+        foreach ($garrisons as $g) {
+            foreach ($g->units as $gu) {
+                $power += ($gu->unitType->defense + $gu->unitType->attack * 0.5) * $gu->quantity;
+            }
+        }
+
         return max($power, 5);
     }
 

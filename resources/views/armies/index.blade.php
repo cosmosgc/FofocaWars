@@ -84,12 +84,26 @@
                                 </select>
                             </div>
                             <div>
-                                <label for="target_city_id" class="block text-sm font-medium text-gray-700 dark:text-gray-300">{{ __('To (enemy city)') }}</label>
+                                <label for="target_city_id" class="block text-sm font-medium text-gray-700 dark:text-gray-300">{{ __('To') }}</label>
                                 <select name="target_city_id" id="target_city_id" class="mt-1 block w-full border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 rounded-md shadow-sm text-sm">
-                                    @foreach($war->cities()->whereNotIn('owner_id', [$player->id])->get() as $city)
-                                        <option value="{{ $city->id }}">{{ $city->name }} ({{ $city->tile_x }},{{ $city->tile_y }})</option>
+                                    @foreach($war->cities()->get() as $city)
+                                        <option value="{{ $city->id }}" {{ $city->owner_id === $player->id ? 'data-own="1"' : '' }}>{{ $city->name }} ({{ $city->tile_x }},{{ $city->tile_y }})</option>
                                     @endforeach
                                 </select>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{{ __('Mission') }}</label>
+                            <div class="flex gap-4">
+                                <label class="inline-flex items-center">
+                                    <input type="radio" name="mission" value="attack" checked class="text-red-600 focus:ring-red-500">
+                                    <span class="ml-2 text-sm text-gray-900 dark:text-gray-100">⚔️ {{ __('Attack') }}</span>
+                                </label>
+                                <label class="inline-flex items-center">
+                                    <input type="radio" name="mission" value="reinforce" class="text-blue-600 focus:ring-blue-500">
+                                    <span class="ml-2 text-sm text-gray-900 dark:text-gray-100">🛡️ {{ __('Reinforce') }}</span>
+                                </label>
                             </div>
                         </div>
 
@@ -112,6 +126,25 @@
                             {{ __('Send Army') }}
                         </button>
                     </form>
+                </div>
+
+                <div class="bg-white dark:bg-gray-800 shadow-sm sm:rounded-lg p-6"
+                     x-data="garrisons('{{ route('api.wars.garrisons', $war) }}')"
+                     x-init="init()">
+                    <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">{{ __('Garrisons') }}</h3>
+                    <div x-show="list.length === 0" class="text-gray-500 text-sm">{{ __('No garrisons.') }}</div>
+                    <template x-for="g in list" :key="g.id">
+                        <div class="border dark:border-gray-700 rounded-lg p-3 mb-2 flex items-center justify-between">
+                            <div class="text-sm">
+                                <span class="font-medium text-gray-900 dark:text-gray-100" x-text="g.target_name"></span>
+                                <span class="text-gray-500 ml-2" x-text="g.units.map(u => u.quantity + 'x ' + u.name).join(', ')"></span>
+                            </div>
+                            <form method="POST" :action="g.recall_url">
+                                @csrf
+                                <button type="submit" class="text-xs px-3 py-1.5 bg-yellow-600 text-white rounded hover:bg-yellow-500">{{ __('Recall') }}</button>
+                            </form>
+                        </div>
+                    </template>
                 </div>
             @endif
 
@@ -181,6 +214,16 @@
                     } catch(e) { this.error = true; this.message = 'Request failed.'; }
                     this.busy = null;
                 },
+            };
+        }
+        function garrisons(url) {
+            return { list: [], interval: null,
+                init() { this.fetch(); this.interval = setInterval(() => this.fetch(), 15000); },
+                async fetch() {
+                    try { const r = await fetch(url); this.list = await r.json(); }
+                    catch(e) {}
+                },
+                destroy() { if (this.interval) clearInterval(this.interval); }
             };
         }
         function movements(url) {
