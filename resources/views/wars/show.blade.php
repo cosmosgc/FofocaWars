@@ -19,6 +19,14 @@
                                class="inline-flex items-center px-4 py-2 bg-red-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-red-500 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 transition ease-in-out duration-150">
                                 {{ __('Armies') }}
                             </a>
+                            <a href="{{ route('alliances.index', $war) }}"
+                               class="inline-flex items-center px-4 py-2 bg-indigo-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition ease-in-out duration-150">
+                                {{ __('Alliances') }}
+                            </a>
+                            <a href="{{ route('messages.index', $war) }}"
+                               class="inline-flex items-center px-4 py-2 bg-cyan-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2 transition ease-in-out duration-150">
+                                {{ __('Messages') }}
+                            </a>
                             @if($war->status === 'setup' && auth()->user()->isAdmin())
                                 <form action="{{ route('wars.start', $war) }}" method="POST">
                                     @csrf
@@ -76,6 +84,26 @@
 
     @push('scripts')
     <script>
+        @if($player)
+            (async function pollNotifs() {
+                try {
+                    const r = await fetch("{{ route('api.wars.notifications', $war) }}");
+                    const d = await r.json();
+                    if (d.count > 0 && !document.getElementById('notif-badge')) {
+                        const btn = document.querySelector('a[href*="armies"]');
+                        if (btn) {
+                            const badge = document.createElement('span');
+                            badge.id = 'notif-badge';
+                            badge.className = 'ml-1 bg-yellow-400 text-black text-xs font-bold px-1.5 py-0.5 rounded-full';
+                            badge.textContent = d.count;
+                            btn.appendChild(badge);
+                        }
+                    }
+                } catch(e) {}
+                setTimeout(pollNotifs, 20000);
+            })();
+        @endif
+
         function resources() {
             return {
                 cities: [],

@@ -30,6 +30,24 @@ Route::middleware('auth')->group(function () {
     Route::get('/wars/{war}/armies/send', fn(\App\Models\War $w) => redirect()->route('armies.index', $w))->name('armies.send');
     Route::post('/wars/{war}/armies/send', [ArmyController::class, 'send']);
     Route::post('/wars/{war}/armies/{army}/recall', [ArmyController::class, 'recall'])->name('armies.recall');
+
+    Route::get('/wars/{war}/alliances', [\App\Http\Controllers\AllianceController::class, 'index'])->name('alliances.index');
+    Route::get('/wars/{war}/alliances/{alliance}', [\App\Http\Controllers\AllianceController::class, 'show'])->name('alliances.show');
+    Route::post('/wars/{war}/alliances', [\App\Http\Controllers\AllianceController::class, 'store'])->name('alliances.store');
+    Route::post('/wars/{war}/alliances/{alliance}/join', [\App\Http\Controllers\AllianceController::class, 'join'])->name('alliances.join');
+    Route::post('/wars/{war}/alliances/{alliance}/leave', [\App\Http\Controllers\AllianceController::class, 'leave'])->name('alliances.leave');
+    Route::post('/wars/{war}/alliances/{alliance}/kick/{member}', [\App\Http\Controllers\AllianceController::class, 'kick'])->name('alliances.kick');
+    Route::post('/wars/{war}/alliances/{alliance}/promote/{member}', [\App\Http\Controllers\AllianceController::class, 'promote'])->name('alliances.promote');
+
+    Route::post('/wars/{war}/diplomacy/{alliance}', [\App\Http\Controllers\DiplomacyController::class, 'setRelation'])->name('diplomacy.set');
+
+    Route::get('/wars/{war}/messages', [\App\Http\Controllers\MessageController::class, 'index'])->name('messages.index');
+    Route::get('/wars/{war}/messages/{conversation}', [\App\Http\Controllers\MessageController::class, 'show'])->name('messages.show');
+    Route::post('/wars/{war}/messages/send', [\App\Http\Controllers\MessageController::class, 'send'])->name('messages.send');
+    Route::post('/wars/{war}/messages/new', [\App\Http\Controllers\MessageController::class, 'new'])->name('messages.new');
+
+    Route::get('/api/wars/{war}/notifications', [\App\Http\Controllers\Api\NotificationController::class, 'index'])->name('api.wars.notifications');
+    Route::post('/api/wars/{war}/notifications/{notification}/read', [\App\Http\Controllers\Api\NotificationController::class, 'read'])->name('api.wars.notifications.read');
     Route::get('/wars/{war}/cities/{city}', [CityController::class, 'show'])->name('cities.show');
     Route::post('/wars/{war}/cities/{city}/rename', [CityController::class, 'rename'])->name('cities.rename');
 
