@@ -24,6 +24,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/wars', [WarController::class, 'index'])->name('wars.index');
     Route::get('/wars/{war}', [WarController::class, 'show'])->name('wars.show');
     Route::post('/wars/{war}/join', [WarController::class, 'join'])->name('wars.join');
+    Route::post('/wars/{war}/found-city', [WarController::class, 'foundCity'])->name('wars.found-city');
     Route::post('/wars/{war}/start', [WarController::class, 'start'])->name('wars.start');
     Route::get('/wars/{war}/map', [WarController::class, 'map'])->name('wars.map');
     Route::get('/wars/{war}/armies', [ArmyController::class, 'index'])->name('armies.index');
@@ -53,6 +54,7 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/api/wars/{war}/tiles', [MapController::class, 'tiles'])->name('api.wars.tiles');
     Route::get('/api/wars/{war}/cities', [MapController::class, 'cities'])->name('api.wars.cities');
+    Route::post('/api/wars/{war}/tiles/found', [MapController::class, 'foundOnTile'])->name('api.wars.tiles.found');
     Route::get('/api/wars/{war}/resources', [ResourceController::class, 'index'])->name('api.wars.resources');
     Route::get('/api/wars/{war}/armies/movements', [\App\Http\Controllers\Api\ArmyController::class, 'movements'])->name('api.wars.armies.movements');
     Route::get('/api/wars/{war}/armies/map-movements', [\App\Http\Controllers\Api\ArmyController::class, 'mapMovements'])->name('api.wars.armies.map-movements');

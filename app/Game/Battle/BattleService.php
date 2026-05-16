@@ -33,6 +33,7 @@ class BattleService
 
             if ($attackerWins) {
                 $attackerArmy->update(['status' => 'stationed', 'target_city_id' => $defenderCity->id]);
+                $this->transferResources($attackerArmy, $defenderCity);
                 $defenderCity->update(['owner_id' => $attackerArmy->owner_id]);
             } else {
                 $this->returnSurvivors($attackerArmy);
@@ -50,6 +51,7 @@ class BattleService
                     'defense_power' => round($defensePower, 1),
                     'attacker_roll' => round($attackerRoll, 3),
                     'defender_roll' => round($defenderRoll, 3),
+                    'loot' => $attackerWins ? $this->calculateLoot($attackerArmy, $defenderCity) : null,
                 ],
             ]);
 
@@ -161,5 +163,37 @@ class BattleService
 
         $army->update(['status' => 'returned']);
         $army->units()->delete();
+    }
+
+    private function calculateLoot(Army $attackerArmy, City $defenderCity): array
+    {
+        $origin = City::find($attackerArmy->origin_city_id);
+        if (!$origin) return [];
+
+        $resources = ['wood', 'stone', 'food', 'metal'];
+        $loot = [];
+
+        foreach ($resources as $r) {
+            $half = (int) floor($defenderCity->{$r} / 2);
+            $cap = $origin->{'max_' . $r} - $origin->{$r};
+            $loot[$r] = max(0, min($half, $cap));
+        }
+
+        return $loot;
+    }
+
+    private function transferResources(Army $attackerArmy, City $defenderCity): void
+    {
+        $origin = City::find($attackerArmy->origin_city_id);
+        if (!$origin) return;
+
+        $loot = $this->calculateLoot($attackerArmy, $defenderCity);
+
+        foreach (['wood', 'stone', 'food', 'metal'] as $r) {
+            $amount = $loot[$r] ?? 0;
+            if ($amount <= 0) continue;
+            $defenderCity->decrement($r, $amount);
+            $origin->increment($r, $amount);
+        }
     }
 }

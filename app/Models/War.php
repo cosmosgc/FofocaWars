@@ -49,4 +49,9 @@ class War extends Model
     {
         return $this->hasMany(City::class);
     }
+
+    public function alliances(): HasMany
+    {
+        return $this->hasMany(Alliance::class);
+    }
 }

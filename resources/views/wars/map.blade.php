@@ -29,6 +29,11 @@
                         <div id="city-info-content"></div>
                     </div>
 
+                    <div id="tile-info" class="absolute top-1/2 left-4 -translate-y-1/2 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 p-4 pr-7 hidden min-w-[220px] text-sm text-gray-900 dark:text-gray-100 z-20">
+                        <button id="tile-info-close" class="absolute top-1 right-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-lg leading-none">&times;</button>
+                        <div id="tile-info-content"></div>
+                    </div>
+
                     <div class="absolute top-2 right-2 flex flex-col gap-2 z-10">
                         <div class="flex items-center gap-2 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 px-2.5 py-1.5">
                             <span class="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">{{ $cities->count() }} {{ __('cities') }}</span>
@@ -87,7 +92,10 @@
             const tilesUrl = "{{ route('api.wars.tiles', $war) }}";
             const citiesUrl = "{{ route('api.wars.cities', $war) }}";
             const movementsUrl = "{{ route('api.wars.armies.map-movements', $war) }}";
+            const foundTileUrl = "{{ route('api.wars.tiles.found', $war) }}";
             const cityUrls = @json($cities->mapWithKeys(fn($c) => [$c->id => route('cities.show', [$war, $c])]));
+            const playerCityCount = {{ $playerCityCount }};
+            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
             const coordsEl = document.getElementById('map-coords');
             const width = container.clientWidth;
             const height = container.clientHeight;
@@ -137,35 +145,20 @@
             const tileGraphics = new PIXI.Graphics();
             worldContainer.addChild(tileGraphics);
 
-            for (const tile of tiles) {
-                const color = terrainColors[tile.terrain_type] || terrainColors.plain;
-                const px = tile.x * tileSize;
-                const py = tile.y * tileSize;
-
-                tileGraphics.beginFill(color);
-                tileGraphics.drawRect(px, py, tileSize, tileSize);
-                tileGraphics.endFill();
-
-                if (tile.owner_id) {
-                    tileGraphics.beginFill(0xffffff, 0.12);
-                    tileGraphics.drawRect(px, py, tileSize, tileSize);
-                    tileGraphics.endFill();
-                }
-            }
-
             const gridGraphics = new PIXI.Graphics();
-            gridGraphics.lineStyle(0.5, 0x000000, 0.08);
-            const maxX = tiles.length > 0 ? Math.max(...tiles.map(t => t.x)) * tileSize : 0;
-            const maxY = tiles.length > 0 ? Math.max(...tiles.map(t => t.y)) * tileSize : 0;
-            for (let x = 0; x <= maxX + tileSize; x += tileSize) {
-                gridGraphics.moveTo(x, 0);
-                gridGraphics.lineTo(x, maxY + tileSize);
-            }
-            for (let y = 0; y <= maxY + tileSize; y += tileSize) {
-                gridGraphics.moveTo(0, y);
-                gridGraphics.lineTo(maxX + tileSize, y);
-            }
             worldContainer.addChild(gridGraphics);
+
+            let maxX = 0, maxY = 0;
+
+            function computeBounds() {
+                maxX = tiles.length > 0 ? Math.max(...tiles.map(t => t.x)) * tileSize : 0;
+                maxY = tiles.length > 0 ? Math.max(...tiles.map(t => t.y)) * tileSize : 0;
+            }
+
+            computeBounds();
+            redrawTiles();
+            redrawGrid();
+            redrawCities();
 
             const cityInfoEl = document.getElementById('city-info');
             const cityInfoContent = document.getElementById('city-info-content');
@@ -193,39 +186,9 @@
             cityInfoClose.onclick = () => cityInfoEl.classList.add('hidden');
             cityInfoEl.addEventListener('click', (e) => { if (e.target === cityInfoEl) cityInfoEl.classList.add('hidden'); });
 
-            for (const city of cities) {
-                const cx = city.tile_x * tileSize + tileSize / 2;
-                const cy = city.tile_y * tileSize + tileSize / 2;
-
-                const cityGfx = new PIXI.Graphics();
-                cityGfx.beginFill(0xf5a623);
-                cityGfx.drawCircle(cx, cy, 8);
-                cityGfx.endFill();
-                cityGfx.beginFill(0xffd700, 0.3);
-                cityGfx.drawCircle(cx, cy, 14);
-                cityGfx.endFill();
-
-                const label = new PIXI.Text(city.name, {
-                    fontSize: 11,
-                    fill: 0xffffff,
-                    stroke: 0x000000,
-                    strokeThickness: 3,
-                });
-                label.anchor.set(0.5, 0);
-                label.x = cx;
-                label.y = cy + 14;
-
-                const cityContainer = new PIXI.Container();
-                cityContainer.addChild(cityGfx, label);
-                cityContainer.eventMode = 'static';
-                cityContainer.cursor = 'pointer';
-                cityContainer.on('pointerdown', (e) => {
-                    e.stopPropagation();
-                    showCityInfo(city);
-                });
-
-                worldContainer.addChild(cityContainer);
-            }
+            const tileInfoClose = document.getElementById('tile-info-close');
+            tileInfoClose.onclick = () => tileInfoEl.classList.add('hidden');
+            tileInfoEl.addEventListener('click', (e) => { if (e.target === tileInfoEl) tileInfoEl.classList.add('hidden'); });
 
             const movContainer = new PIXI.Container();
             worldContainer.addChild(movContainer);
@@ -309,30 +272,211 @@
             }
 
             let isDragging = false;
-            let dragStart = { x: 0, y: 0 };
+            let dragStart = { x: 0, y: 0, screenX: null, screenY: null };
+            const dragThreshold = 4;
+
+            const tileInfoEl = document.getElementById('tile-info');
+            const tileInfoContent = document.getElementById('tile-info-content');
+
+            function reloadMapData() {
+                return Promise.all([
+                    fetch(tilesUrl).then(r => r.json()),
+                    fetch(citiesUrl).then(r => r.json()),
+                ]);
+            }
+
+            async function refetchTilesAndCities() {
+                try {
+                    const [newTiles, newCities] = await reloadMapData();
+                    tiles = newTiles;
+                    cities = newCities;
+                    worldContainer.removeChild(tileGraphics);
+                    worldContainer.removeChild(gridGraphics);
+                    redrawTiles();
+                    redrawGrid();
+                    redrawCities();
+                } catch(e) {}
+            }
+
+            function redrawTiles() {
+                tileGraphics.clear();
+                for (const tile of tiles) {
+                    const color = terrainColors[tile.terrain_type] || terrainColors.plain;
+                    const px = tile.x * tileSize;
+                    const py = tile.y * tileSize;
+                    tileGraphics.beginFill(color);
+                    tileGraphics.drawRect(px, py, tileSize, tileSize);
+                    tileGraphics.endFill();
+                    if (tile.owner_id) {
+                        tileGraphics.beginFill(0xffffff, 0.12);
+                        tileGraphics.drawRect(px, py, tileSize, tileSize);
+                        tileGraphics.endFill();
+                    }
+                }
+                worldContainer.addChildAt(tileGraphics, 0);
+            }
+
+            function redrawGrid() {
+                gridGraphics.clear();
+                gridGraphics.lineStyle(0.5, 0x000000, 0.08);
+                for (let x = 0; x <= maxX + tileSize; x += tileSize) {
+                    gridGraphics.moveTo(x, 0);
+                    gridGraphics.lineTo(x, maxY + tileSize);
+                }
+                for (let y = 0; y <= maxY + tileSize; y += tileSize) {
+                    gridGraphics.moveTo(0, y);
+                    gridGraphics.lineTo(maxX + tileSize, y);
+                }
+                worldContainer.addChildAt(gridGraphics, 1);
+            }
+
+            function redrawCities() {
+                const oldCities = worldContainer.children.filter(c => c._isCityContainer);
+                oldCities.forEach(c => worldContainer.removeChild(c));
+
+                for (const city of cities) {
+                    const cx = city.tile_x * tileSize + tileSize / 2;
+                    const cy = city.tile_y * tileSize + tileSize / 2;
+
+                    const cityGfx = new PIXI.Graphics();
+                    cityGfx.beginFill(0xf5a623);
+                    cityGfx.drawCircle(cx, cy, 8);
+                    cityGfx.endFill();
+                    cityGfx.beginFill(0xffd700, 0.3);
+                    cityGfx.drawCircle(cx, cy, 14);
+                    cityGfx.endFill();
+
+                    const label = new PIXI.Text(city.name, {
+                        fontSize: 11,
+                        fill: 0xffffff,
+                        stroke: 0x000000,
+                        strokeThickness: 3,
+                    });
+                    label.anchor.set(0.5, 0);
+                    label.x = cx;
+                    label.y = cy + 14;
+
+                    const cc = new PIXI.Container();
+                    cc._isCityContainer = true;
+                    cc.addChild(cityGfx, label);
+                    cc.eventMode = 'static';
+                    cc.cursor = 'pointer';
+                    cc.on('pointerdown', (e) => {
+                        e.stopPropagation();
+                        showCityInfo(city);
+                    });
+
+                    worldContainer.addChild(cc);
+                }
+            }
+
+            function clickedTile(e) {
+                const worldX = (e.global.x - worldContainer.x) / worldContainer.scale.x;
+                const worldY = (e.global.y - worldContainer.y) / worldContainer.scale.y;
+                const tileX = Math.floor(worldX / tileSize);
+                const tileY = Math.floor(worldY / tileSize);
+                const tile = tiles.find(t => t.x === tileX && t.y === tileY);
+                if (!tile) return;
+
+                const terrainNames = { plain: '{{ __('Plain') }}', forest: '{{ __('Forest') }}', mountain: '{{ __('Mountain') }}', water: '{{ __('Water') }}', desert: '{{ __('Desert') }}' };
+                const terrainLabel = terrainNames[tile.terrain_type] || tile.terrain_type;
+
+                const isOwned = !!tile.owner_id;
+                const isWater = tile.terrain_type === 'water';
+                const canFound = !isOwned && !isWater;
+
+                tileInfoContent.innerHTML = `
+                    <div class="font-semibold text-base mb-2">${__i18n('Tile')} (${tileX}, ${tileY})</div>
+                    <div class="space-y-1 text-gray-600 dark:text-gray-300">
+                        <div class="flex justify-between"><span>${__i18n('Terrain')}</span><span>${terrainLabel}</span></div>
+                        ${isOwned ? `<div class="flex justify-between"><span>${__i18n('Owner')}</span><span>${__i18n('Occupied')}</span></div>` : ''}
+                    </div>
+                    ${canFound ? `
+                        <button id="found-city-btn" class="mt-3 w-full text-center text-sm font-medium px-3 py-2 rounded bg-yellow-600 text-white hover:bg-yellow-500 transition">
+                            ${__i18n('Found City')}
+                        </button>
+                        <div id="found-city-status" class="mt-2 text-xs hidden"></div>
+                    ` : ''}
+                `;
+                tileInfoEl.classList.remove('hidden');
+
+                if (canFound) {
+                    const btn = document.getElementById('found-city-btn');
+                    const status = document.getElementById('found-city-status');
+                    btn.onclick = async () => {
+                        btn.disabled = true;
+                        btn.textContent = '...';
+                        status.classList.remove('hidden');
+                        status.textContent = '{{ __('Processing...') }}';
+                        try {
+                            const res = await fetch(foundTileUrl, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrfToken },
+                                body: JSON.stringify({ x: tileX, y: tileY }),
+                            });
+                            const data = await res.json();
+                            if (data.success) {
+                                status.textContent = '{{ __('City founded!') }}';
+                                btn.textContent = '{{ __('Done') }}';
+                                btn.disabled = true;
+                                setTimeout(() => { tileInfoEl.classList.add('hidden'); }, 2000);
+                                await refetchTilesAndCities();
+                            } else {
+                                status.textContent = data.error || '{{ __('Error') }}';
+                                btn.disabled = false;
+                                btn.textContent = '{{ __('Found City') }}';
+                            }
+                        } catch(e) {
+                            status.textContent = '{{ __('Error') }}';
+                            btn.disabled = false;
+                            btn.textContent = '{{ __('Found City') }}';
+                        }
+                    };
+                }
+            }
 
             app.stage.eventMode = 'static';
             app.stage.hitArea = app.screen;
 
             app.stage.on('pointerdown', (e) => {
-                isDragging = true;
+                isDragging = false;
                 dragStart.x = e.global.x - worldContainer.x;
                 dragStart.y = e.global.y - worldContainer.y;
+                dragStart.screenX = e.global.x;
+                dragStart.screenY = e.global.y;
             });
 
             app.stage.on('pointermove', (e) => {
-                if (!isDragging) {
+                if (!dragStart.screenX && dragStart.screenX !== 0) {
                     const worldX = (e.global.x - worldContainer.x) / worldContainer.scale.x;
                     const worldY = (e.global.y - worldContainer.y) / worldContainer.scale.y;
                     coordsEl.textContent = `x: ${Math.floor(worldX / tileSize)}, y: ${Math.floor(worldY / tileSize)}`;
                     return;
                 }
-                worldContainer.x = e.global.x - dragStart.x;
-                worldContainer.y = e.global.y - dragStart.y;
+                const dx = e.global.x - dragStart.screenX;
+                const dy = e.global.y - dragStart.screenY;
+                if (Math.abs(dx) > dragThreshold || Math.abs(dy) > dragThreshold) {
+                    isDragging = true;
+                }
+                if (isDragging) {
+                    worldContainer.x = e.global.x - dragStart.x;
+                    worldContainer.y = e.global.y - dragStart.y;
+                }
             });
 
-            app.stage.on('pointerup', () => { isDragging = false; });
-            app.stage.on('pointerupoutside', () => { isDragging = false; });
+            app.stage.on('pointerup', (e) => {
+                if (!isDragging) {
+                    clickedTile(e);
+                }
+                isDragging = false;
+                dragStart.screenX = null;
+                dragStart.screenY = null;
+            });
+            app.stage.on('pointerupoutside', () => {
+                isDragging = false;
+                dragStart.screenX = null;
+                dragStart.screenY = null;
+            });
 
             function zoomAt(scaleDelta, cx, cy) {
                 const newScale = worldContainer.scale.x * scaleDelta;

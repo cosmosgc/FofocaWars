@@ -29,6 +29,11 @@ class WarPlayer extends Model
         return $this->belongsTo(User::class);
     }
 
+    public function warUser(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'user_id');
+    }
+
     public function cities(): HasMany
     {
         return $this->hasMany(City::class, 'owner_id');

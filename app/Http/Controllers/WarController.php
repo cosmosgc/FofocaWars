@@ -23,13 +23,16 @@ class WarController extends Controller
             ->where('user_id', Auth::id())
             ->first();
 
-        return view('wars.show', compact('war', 'player'));
+        $cityCount = $player ? $war->cities()->where('owner_id', $player->id)->count() : 0;
+        $canFoundCity = $player && $cityCount < $war->max_bases_per_player;
+
+        return view('wars.show', compact('war', 'player', 'cityCount', 'canFoundCity'));
     }
 
     public function join(War $war, MapGenerator $generator)
     {
-        if ($war->status !== 'setup') {
-            return back()->with('error', 'This war has already started.');
+        if ($war->status === 'ended') {
+            return back()->with('error', 'This war has ended.');
         }
 
         $exists = WarPlayer::where('war_id', $war->id)
@@ -54,31 +57,60 @@ class WarController extends Controller
                 'last_active_at' => now(),
             ]);
 
-            $tile = Tile::where('war_id', $war->id)
-                ->whereNull('owner_id')
-                ->where('terrain_type', 'plain')
-                ->inRandomOrder()
-                ->first();
-
-            if (!$tile) {
-                $tile = Tile::where('war_id', $war->id)
-                    ->whereNull('owner_id')
-                    ->inRandomOrder()
-                    ->first();
-            }
-
-            $war->cities()->create([
-                'owner_id' => $player->id,
-                'name' => 'Capital',
-                'tile_x' => $tile->x,
-                'tile_y' => $tile->y,
-                'population' => 100,
-            ]);
-
-            $tile->update(['owner_id' => $player->id, 'structure_id' => 'city']);
+            $this->placeCity($war, $player);
         });
 
         return redirect()->route('wars.show', $war);
+    }
+
+    public function foundCity(War $war)
+    {
+        $player = WarPlayer::where('war_id', $war->id)
+            ->where('user_id', Auth::id())
+            ->firstOrFail();
+
+        if ($war->status === 'ended') {
+            return back()->with('error', 'This war has ended.');
+        }
+
+        $cityCount = $war->cities()->where('owner_id', $player->id)->count();
+        if ($cityCount >= $war->max_bases_per_player) {
+            return back()->with('error', 'You have reached the maximum number of cities.');
+        }
+
+        \DB::transaction(function () use ($war, $player) {
+            $this->placeCity($war, $player);
+        });
+
+        return redirect()->route('wars.show', $war)->with('success', 'City founded.');
+    }
+
+    private function placeCity(War $war, WarPlayer $player): void
+    {
+        $tile = Tile::where('war_id', $war->id)
+            ->whereNull('owner_id')
+            ->where('terrain_type', 'plain')
+            ->inRandomOrder()
+            ->first();
+
+        if (!$tile) {
+            $tile = Tile::where('war_id', $war->id)
+                ->whereNull('owner_id')
+                ->inRandomOrder()
+                ->first();
+        }
+
+        $count = $war->cities()->where('owner_id', $player->id)->count();
+
+        $war->cities()->create([
+            'owner_id' => $player->id,
+            'name' => 'Settlement ' . ($count + 1),
+            'tile_x' => $tile->x,
+            'tile_y' => $tile->y,
+            'population' => 50,
+        ]);
+
+        $tile->update(['owner_id' => $player->id, 'structure_id' => 'city']);
     }
 
     public function start(War $war)
@@ -99,6 +131,8 @@ class WarController extends Controller
 
         $cities = $war->cities()->where('owner_id', $player->id)->get();
 
-        return view('wars.map', compact('war', 'player', 'cities'));
+        $playerCityCount = $cities->count();
+
+        return view('wars.map', compact('war', 'player', 'cities', 'playerCityCount'));
     }
 }
