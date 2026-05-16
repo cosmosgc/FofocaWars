@@ -95,6 +95,7 @@
             const foundTileUrl = "{{ route('api.wars.tiles.found', $war) }}";
             const cityUrls = @json($cities->mapWithKeys(fn($c) => [$c->id => route('cities.show', [$war, $c])]));
             const playerCityCount = {{ $playerCityCount }};
+            const constructionSpeed = {{ $war->construction_speed }};
             const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
             const coordsEl = document.getElementById('map-coords');
             const width = container.clientWidth;
@@ -150,6 +151,16 @@
 
             let maxX = 0, maxY = 0;
 
+            const cityInfoEl = document.getElementById('city-info');
+            const cityInfoContent = document.getElementById('city-info-content');
+            const cityInfoClose = document.getElementById('city-info-close');
+
+            const tileInfoEl = document.getElementById('tile-info');
+            const tileInfoContent = document.getElementById('tile-info-content');
+            const tileInfoClose = document.getElementById('tile-info-close');
+            tileInfoClose.onclick = () => tileInfoEl.classList.add('hidden');
+            tileInfoEl.addEventListener('click', (e) => { if (e.target === tileInfoEl) tileInfoEl.classList.add('hidden'); });
+
             function computeBounds() {
                 maxX = tiles.length > 0 ? Math.max(...tiles.map(t => t.x)) * tileSize : 0;
                 maxY = tiles.length > 0 ? Math.max(...tiles.map(t => t.y)) * tileSize : 0;
@@ -159,10 +170,6 @@
             redrawTiles();
             redrawGrid();
             redrawCities();
-
-            const cityInfoEl = document.getElementById('city-info');
-            const cityInfoContent = document.getElementById('city-info-content');
-            const cityInfoClose = document.getElementById('city-info-close');
 
             function showCityInfo(city) {
                 cityInfoContent.innerHTML = `
@@ -185,10 +192,6 @@
 
             cityInfoClose.onclick = () => cityInfoEl.classList.add('hidden');
             cityInfoEl.addEventListener('click', (e) => { if (e.target === cityInfoEl) cityInfoEl.classList.add('hidden'); });
-
-            const tileInfoClose = document.getElementById('tile-info-close');
-            tileInfoClose.onclick = () => tileInfoEl.classList.add('hidden');
-            tileInfoEl.addEventListener('click', (e) => { if (e.target === tileInfoEl) tileInfoEl.classList.add('hidden'); });
 
             const movContainer = new PIXI.Container();
             worldContainer.addChild(movContainer);
@@ -274,9 +277,6 @@
             let isDragging = false;
             let dragStart = { x: 0, y: 0, screenX: null, screenY: null };
             const dragThreshold = 4;
-
-            const tileInfoEl = document.getElementById('tile-info');
-            const tileInfoContent = document.getElementById('tile-info-content');
 
             function reloadMapData() {
                 return Promise.all([
@@ -385,12 +385,31 @@
                 const isWater = tile.terrain_type === 'water';
                 const canFound = !isOwned && !isWater;
 
+                let costHtml = '';
+                if (canFound) {
+                    if (playerCityCount === 0) {
+                        costHtml = `<div class="mt-2 text-green-600 dark:text-green-400 font-medium text-xs">${__i18n('Free (first city)')}</div>`;
+                    } else {
+                        const cs = Math.max(1, constructionSpeed);
+                        const costs = { wood: Math.round(200 * cs), stone: Math.round(150 * cs), food: Math.round(100 * cs), metal: Math.round(50 * cs) };
+                        costHtml = `
+                            <div class="mt-2 text-xs text-gray-500 dark:text-gray-400 font-medium">${__i18n('Cost')}:</div>
+                            <div class="grid grid-cols-2 gap-x-2 gap-y-0.5 mt-1 text-xs">
+                                <div class="flex items-center gap-1 text-gray-600 dark:text-gray-300"><span>🪵</span> <span>${costs.wood.toLocaleString()}</span></div>
+                                <div class="flex items-center gap-1 text-gray-600 dark:text-gray-300"><span>🪨</span> <span>${costs.stone.toLocaleString()}</span></div>
+                                <div class="flex items-center gap-1 text-gray-600 dark:text-gray-300"><span>🍖</span> <span>${costs.food.toLocaleString()}</span></div>
+                                <div class="flex items-center gap-1 text-gray-600 dark:text-gray-300"><span>⚙️</span> <span>${costs.metal.toLocaleString()}</span></div>
+                            </div>`;
+                    }
+                }
+
                 tileInfoContent.innerHTML = `
                     <div class="font-semibold text-base mb-2">${__i18n('Tile')} (${tileX}, ${tileY})</div>
                     <div class="space-y-1 text-gray-600 dark:text-gray-300">
                         <div class="flex justify-between"><span>${__i18n('Terrain')}</span><span>${terrainLabel}</span></div>
                         ${isOwned ? `<div class="flex justify-between"><span>${__i18n('Owner')}</span><span>${__i18n('Occupied')}</span></div>` : ''}
                     </div>
+                    ${costHtml}
                     ${canFound ? `
                         <button id="found-city-btn" class="mt-3 w-full text-center text-sm font-medium px-3 py-2 rounded bg-yellow-600 text-white hover:bg-yellow-500 transition">
                             ${__i18n('Found City')}
