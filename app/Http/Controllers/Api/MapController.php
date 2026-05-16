@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\War;
 use App\Models\Tile;
 use App\Models\City;
+use App\Models\Base;
 use App\Models\WarPlayer;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -54,6 +55,123 @@ class MapController extends Controller
             'food' => $c->food,
             'metal' => $c->metal,
         ]));
+    }
+
+    public function bases(War $war)
+    {
+        $bases = Base::where('war_id', $war->id)
+            ->with('owner.user')
+            ->get();
+
+        return response()->json($bases->map(fn($b) => [
+            'id' => $b->id,
+            'owner_id' => $b->owner_id,
+            'owner_name' => $b->owner?->user?->name,
+            'type' => $b->type,
+            'name' => $b->name,
+            'tile_x' => $b->tile_x,
+            'tile_y' => $b->tile_y,
+            'level' => $b->level,
+        ]));
+    }
+
+    public function createBase(War $war, Request $request)
+    {
+        $request->validate([
+            'x' => 'required|integer|min:0',
+            'y' => 'required|integer|min:0',
+            'type' => 'required|in:resource,military,trade,alliance',
+        ]);
+
+        if ($war->status === 'ended') {
+            return response()->json(['error' => 'War has ended.'], 400);
+        }
+
+        $player = WarPlayer::where('war_id', $war->id)
+            ->where('user_id', Auth::id())
+            ->firstOrFail();
+
+        $tile = Tile::where('war_id', $war->id)
+            ->where('x', $request->x)
+            ->where('y', $request->y)
+            ->firstOrFail();
+
+        if ($tile->owner_id) {
+            return response()->json(['error' => 'Tile already owned.'], 400);
+        }
+
+        if ($tile->terrain_type === 'water') {
+            return response()->json(['error' => 'Cannot build on water.'], 400);
+        }
+
+        $costScale = max(1, (float) $war->construction_speed);
+        $costs = [
+            'resource' => ['wood' => 100, 'stone' => 80, 'food' => 50, 'metal' => 30],
+            'military' => ['wood' => 150, 'stone' => 50, 'food' => 100, 'metal' => 80],
+            'trade'    => ['wood' => 80, 'stone' => 100, 'food' => 50, 'metal' => 60],
+            'alliance' => ['wood' => 200, 'stone' => 200, 'food' => 100, 'metal' => 100],
+        ];
+
+        $type = $request->type;
+        $baseCosts = [];
+        foreach (['wood', 'stone', 'food', 'metal'] as $r) {
+            $baseCosts[$r] = (int) round(($costs[$type][$r] ?? 999) * $costScale);
+        }
+
+        $playerCities = City::where('war_id', $war->id)
+            ->where('owner_id', $player->id)
+            ->get();
+
+        foreach (['wood', 'stone', 'food', 'metal'] as $r) {
+            $total = $playerCities->sum($r);
+            if ($total < $baseCosts[$r]) {
+                return response()->json([
+                    'error' => "Not enough {$r}. Need {$baseCosts[$r]}, have {$total}.",
+                    'costs' => $baseCosts,
+                ], 400);
+            }
+        }
+
+        foreach (['wood', 'stone', 'food', 'metal'] as $r) {
+            $remaining = $baseCosts[$r];
+            foreach ($playerCities as $city) {
+                if ($remaining <= 0) break;
+                $take = min($city->{$r}, $remaining);
+                $city->decrement($r, $take);
+                $remaining -= $take;
+            }
+        }
+
+        $typeNames = [
+            'resource' => 'Resource Outpost',
+            'military' => 'Troop Camp',
+            'trade'    => 'Trade Post',
+            'alliance' => 'Alliance Base',
+        ];
+
+        $base = Base::create([
+            'war_id' => $war->id,
+            'owner_id' => $player->id,
+            'tile_x' => $tile->x,
+            'tile_y' => $tile->y,
+            'type' => $type,
+            'name' => $typeNames[$type],
+            'level' => 1,
+        ]);
+
+        $tile->update(['owner_id' => $player->id, 'structure_id' => 'base']);
+
+        return response()->json([
+            'success' => true,
+            'base' => [
+                'id' => $base->id,
+                'type' => $base->type,
+                'name' => $base->name,
+                'tile_x' => $base->tile_x,
+                'tile_y' => $base->tile_y,
+                'level' => $base->level,
+            ],
+        ]);
     }
 
     public function foundOnTile(War $war, Request $request)

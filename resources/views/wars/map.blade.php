@@ -54,7 +54,7 @@
 
             <div class="bg-white dark:bg-gray-800 shadow-sm sm:rounded-lg">
                 <div class="p-6">
-                    <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">{{ __('Your Territories') }}</h3>
+                    <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">{{ __('Your Cities') }}</h3>
                     @if($cities->isEmpty())
                         <p class="text-gray-500 dark:text-gray-400">{{ __('You have no cities in this war.') }}</p>
                     @else
@@ -79,6 +79,43 @@
                     @endif
                 </div>
             </div>
+
+            <div class="bg-white dark:bg-gray-800 shadow-sm sm:rounded-lg">
+                <div class="p-6">
+                    <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">{{ __('Your Bases') }}</h3>
+                    @if($bases->isEmpty())
+                        <p class="text-gray-500 dark:text-gray-400">{{ __('You have no bases in this war.') }}</p>
+                    @else
+                        <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                            @php $baseColors = ['resource' => '#22c55e', 'military' => '#ef4444', 'trade' => '#3b82f6', 'alliance' => '#a855f7']; @endphp
+                            @foreach($bases as $base)
+                                <a href="{{ route('bases.show', [$war, $base]) }}"
+                                   class="block border dark:border-gray-700 rounded-lg p-4 hover:bg-gray-50 dark:hover:bg-gray-700 transition">
+                                    <div class="flex items-center justify-between mb-2">
+                                        <div class="flex items-center gap-2">
+                                            <span class="w-3 h-3 rounded inline-block" style="background: {{ $baseColors[$base->type] ?? '#6b7280' }}"></span>
+                                            <h4 class="font-medium text-gray-900 dark:text-gray-100">{{ $base->name }}</h4>
+                                        </div>
+                                        <span class="text-xs text-gray-500 dark:text-gray-400">({{ $base->tile_x }}, {{ $base->tile_y }})</span>
+                                    </div>
+                                    <div class="flex items-center gap-3 text-sm text-gray-600 dark:text-gray-400">
+                                        <span>{{ __('Level') }} {{ $base->level }}</span>
+                                        <span class="text-xs px-1.5 py-0.5 rounded-full text-white"
+                                              style="background: {{ $baseColors[$base->type] ?? '#6b7280' }}">
+                                            @switch($base->type)
+                                                @case('resource') {{ __('Resource') }} @break
+                                                @case('military') {{ __('Military') }} @break
+                                                @case('trade') {{ __('Trade') }} @break
+                                                @case('alliance') {{ __('Alliance') }} @break
+                                            @endswitch
+                                        </span>
+                                    </div>
+                                </a>
+                            @endforeach
+                        </div>
+                    @endif
+                </div>
+            </div>
         </div>
     </div>
 
@@ -91,8 +128,10 @@
             const container = document.getElementById('pixi-container');
             const tilesUrl = "{{ route('api.wars.tiles', $war) }}";
             const citiesUrl = "{{ route('api.wars.cities', $war) }}";
+            const basesUrl = "{{ route('api.wars.bases', $war) }}";
             const movementsUrl = "{{ route('api.wars.armies.map-movements', $war) }}";
             const foundTileUrl = "{{ route('api.wars.tiles.found', $war) }}";
+            const createBaseUrl = "{{ route('api.wars.bases.create', $war) }}";
             const cityUrls = @json($cities->mapWithKeys(fn($c) => [$c->id => route('cities.show', [$war, $c])]));
             const playerCityCount = {{ $playerCityCount }};
             const constructionSpeed = {{ $war->construction_speed }};
@@ -126,16 +165,19 @@
 
             let tiles = [];
             let cities = [];
+            let bases = [];
             let movements = [];
 
             try {
-                const [tilesRes, citiesRes, movRes] = await Promise.all([
+                const [tilesRes, citiesRes, basesRes, movRes] = await Promise.all([
                     fetch(tilesUrl),
                     fetch(citiesUrl),
+                    fetch(basesUrl),
                     fetch(movementsUrl),
                 ]);
                 tiles = await tilesRes.json();
                 cities = await citiesRes.json();
+                bases = await basesRes.json();
                 movements = await movRes.json();
             } catch (e) {
                 console.error('Failed to load map data:', e);
@@ -170,6 +212,7 @@
             redrawTiles();
             redrawGrid();
             redrawCities();
+            redrawBases();
 
             function showCityInfo(city) {
                 cityInfoContent.innerHTML = `
@@ -282,19 +325,22 @@
                 return Promise.all([
                     fetch(tilesUrl).then(r => r.json()),
                     fetch(citiesUrl).then(r => r.json()),
+                    fetch(basesUrl).then(r => r.json()),
                 ]);
             }
 
             async function refetchTilesAndCities() {
                 try {
-                    const [newTiles, newCities] = await reloadMapData();
+                    const [newTiles, newCities, newBases] = await reloadMapData();
                     tiles = newTiles;
                     cities = newCities;
+                    bases = newBases;
                     worldContainer.removeChild(tileGraphics);
                     worldContainer.removeChild(gridGraphics);
                     redrawTiles();
                     redrawGrid();
                     redrawCities();
+                    redrawBases();
                 } catch(e) {}
             }
 
@@ -370,6 +416,63 @@
                 }
             }
 
+            function redrawBases() {
+                const oldBases = worldContainer.children.filter(c => c._isBaseContainer);
+                oldBases.forEach(c => worldContainer.removeChild(c));
+
+                const baseColors = { resource: 0x22c55e, military: 0xef4444, trade: 0x3b82f6, alliance: 0xa855f7 };
+
+                for (const base of bases) {
+                    const cx = base.tile_x * tileSize + tileSize / 2;
+                    const cy = base.tile_y * tileSize + tileSize / 2;
+                    const color = baseColors[base.type] || 0x94a3b8;
+
+                    const gfx = new PIXI.Graphics();
+                    gfx.beginFill(color);
+                    gfx.drawRoundedRect(cx - 7, cy - 7, 14, 14, 3);
+                    gfx.endFill();
+                    gfx.beginFill(0xffffff, 0.15);
+                    gfx.drawRoundedRect(cx - 7, cy - 7, 14, 14, 3);
+                    gfx.endFill();
+
+                    const label = new PIXI.Text(base.name, {
+                        fontSize: 9,
+                        fill: 0xffffff,
+                        stroke: 0x000000,
+                        strokeThickness: 2,
+                    });
+                    label.anchor.set(0.5, 0);
+                    label.x = cx;
+                    label.y = cy + 11;
+
+                    const cc = new PIXI.Container();
+                    cc._isBaseContainer = true;
+                    cc.addChild(gfx, label);
+                    cc.eventMode = 'static';
+                    cc.cursor = 'pointer';
+                    cc.on('pointerdown', (e) => {
+                        e.stopPropagation();
+                        showBaseInfo(base);
+                    });
+
+                    worldContainer.addChild(cc);
+                }
+            }
+
+            function showBaseInfo(base) {
+                const typeNames = { resource: '{{ __('Resource Outpost') }}', military: '{{ __('Troop Camp') }}', trade: '{{ __('Trade Post') }}', alliance: '{{ __('Alliance Base') }}' };
+                tileInfoContent.innerHTML = `
+                    <div class="font-semibold text-base mb-2">${base.name}</div>
+                    <div class="space-y-1 text-gray-600 dark:text-gray-300">
+                        <div class="flex justify-between"><span>${__i18n('Type')}</span><span>${typeNames[base.type] || base.type}</span></div>
+                        <div class="flex justify-between"><span>${__i18n('Level')}</span><span>${base.level}</span></div>
+                        <div class="flex justify-between"><span>${__i18n('Coordinates')}</span><span class="font-mono">(${base.tile_x}, ${base.tile_y})</span></div>
+                        ${base.owner_name ? `<div class="flex justify-between"><span>${__i18n('Owner')}</span><span>${base.owner_name}</span></div>` : ''}
+                    </div>
+                `;
+                tileInfoEl.classList.remove('hidden');
+            }
+
             function clickedTile(e) {
                 const worldX = (e.global.x - worldContainer.x) / worldContainer.scale.x;
                 const worldY = (e.global.y - worldContainer.y) / worldContainer.scale.y;
@@ -378,30 +481,44 @@
                 const tile = tiles.find(t => t.x === tileX && t.y === tileY);
                 if (!tile) return;
 
+                const existingBase = bases.find(b => b.tile_x === tileX && b.tile_y === tileY);
+                if (existingBase) { showBaseInfo(existingBase); return; }
+
                 const terrainNames = { plain: '{{ __('Plain') }}', forest: '{{ __('Forest') }}', mountain: '{{ __('Mountain') }}', water: '{{ __('Water') }}', desert: '{{ __('Desert') }}' };
                 const terrainLabel = terrainNames[tile.terrain_type] || tile.terrain_type;
 
                 const isOwned = !!tile.owner_id;
                 const isWater = tile.terrain_type === 'water';
-                const canFound = !isOwned && !isWater;
+                const canBuild = !isOwned && !isWater;
+                const cs = Math.max(1, constructionSpeed);
 
-                let costHtml = '';
-                if (canFound) {
+                const baseCosts = {
+                    resource: { wood: Math.round(100 * cs), stone: Math.round(80 * cs), food: Math.round(50 * cs), metal: Math.round(30 * cs) },
+                    military: { wood: Math.round(150 * cs), stone: Math.round(50 * cs), food: Math.round(100 * cs), metal: Math.round(80 * cs) },
+                    trade:    { wood: Math.round(80 * cs), stone: Math.round(100 * cs), food: Math.round(50 * cs), metal: Math.round(60 * cs) },
+                    alliance: { wood: Math.round(200 * cs), stone: Math.round(200 * cs), food: Math.round(100 * cs), metal: Math.round(100 * cs) },
+                };
+
+                let cityCostHtml = '';
+                if (canBuild) {
                     if (playerCityCount === 0) {
-                        costHtml = `<div class="mt-2 text-green-600 dark:text-green-400 font-medium text-xs">${__i18n('Free (first city)')}</div>`;
+                        cityCostHtml = `<div class="mt-2 text-green-600 dark:text-green-400 font-medium text-xs">${__i18n('Free (first city)')}</div>`;
                     } else {
-                        const cs = Math.max(1, constructionSpeed);
-                        const costs = { wood: Math.round(200 * cs), stone: Math.round(150 * cs), food: Math.round(100 * cs), metal: Math.round(50 * cs) };
-                        costHtml = `
+                        const cc = { wood: Math.round(200 * cs), stone: Math.round(150 * cs), food: Math.round(100 * cs), metal: Math.round(50 * cs) };
+                        cityCostHtml = `
                             <div class="mt-2 text-xs text-gray-500 dark:text-gray-400 font-medium">${__i18n('Cost')}:</div>
                             <div class="grid grid-cols-2 gap-x-2 gap-y-0.5 mt-1 text-xs">
-                                <div class="flex items-center gap-1 text-gray-600 dark:text-gray-300"><span>🪵</span> <span>${costs.wood.toLocaleString()}</span></div>
-                                <div class="flex items-center gap-1 text-gray-600 dark:text-gray-300"><span>🪨</span> <span>${costs.stone.toLocaleString()}</span></div>
-                                <div class="flex items-center gap-1 text-gray-600 dark:text-gray-300"><span>🍖</span> <span>${costs.food.toLocaleString()}</span></div>
-                                <div class="flex items-center gap-1 text-gray-600 dark:text-gray-300"><span>⚙️</span> <span>${costs.metal.toLocaleString()}</span></div>
+                                <div class="flex items-center gap-1 text-gray-600 dark:text-gray-300"><span>🪵</span> <span>${cc.wood.toLocaleString()}</span></div>
+                                <div class="flex items-center gap-1 text-gray-600 dark:text-gray-300"><span>🪨</span> <span>${cc.stone.toLocaleString()}</span></div>
+                                <div class="flex items-center gap-1 text-gray-600 dark:text-gray-300"><span>🍖</span> <span>${cc.food.toLocaleString()}</span></div>
+                                <div class="flex items-center gap-1 text-gray-600 dark:text-gray-300"><span>⚙️</span> <span>${cc.metal.toLocaleString()}</span></div>
                             </div>`;
                     }
                 }
+
+                const baseTypeList = ['resource', 'military', 'trade', 'alliance'];
+                const baseTypeNames = { resource: '{{ __('Resource Outpost') }}', military: '{{ __('Troop Camp') }}', trade: '{{ __('Trade Post') }}', alliance: '{{ __('Alliance Base') }}' };
+                const baseEmojis = { resource: '🪵', military: '⚔️', trade: '💎', alliance: '🛡️' };
 
                 tileInfoContent.innerHTML = `
                     <div class="font-semibold text-base mb-2">${__i18n('Tile')} (${tileX}, ${tileY})</div>
@@ -409,48 +526,97 @@
                         <div class="flex justify-between"><span>${__i18n('Terrain')}</span><span>${terrainLabel}</span></div>
                         ${isOwned ? `<div class="flex justify-between"><span>${__i18n('Owner')}</span><span>${__i18n('Occupied')}</span></div>` : ''}
                     </div>
-                    ${costHtml}
-                    ${canFound ? `
-                        <button id="found-city-btn" class="mt-3 w-full text-center text-sm font-medium px-3 py-2 rounded bg-yellow-600 text-white hover:bg-yellow-500 transition">
+                    ${cityCostHtml}
+                    ${canBuild ? `
+                        <button id="found-city-btn" class="mt-2 w-full text-center text-sm font-medium px-3 py-2 rounded bg-yellow-600 text-white hover:bg-yellow-500 transition">
                             ${__i18n('Found City')}
                         </button>
-                        <div id="found-city-status" class="mt-2 text-xs hidden"></div>
+                        <div id="found-city-status" class="mt-1 text-xs hidden"></div>
+                        <hr class="my-2 border-gray-300 dark:border-gray-600">
+                        <div class="text-xs text-gray-500 dark:text-gray-400 font-medium mb-1">${__i18n('Build Base')}:</div>
+                        <div class="grid grid-cols-2 gap-1.5">
+                            ${baseTypeList.map(t => `
+                                <button class="base-type-btn text-xs px-2 py-1.5 rounded border text-left transition"
+                                        data-type="${t}"
+                                        style="border-color: ${t === 'resource' ? '#22c55e' : t === 'military' ? '#ef4444' : t === 'trade' ? '#3b82f6' : '#a855f7'}; color: ${t === 'resource' ? '#22c55e' : t === 'military' ? '#ef4444' : t === 'trade' ? '#3b82f6' : '#a855f7'}">
+                                    <div class="font-medium">${baseEmojis[t]} ${baseTypeNames[t]}</div>
+                                    <div class="text-[10px] opacity-75">🪵${baseCosts[t].wood} 🪨${baseCosts[t].stone}</div>
+                                    <div class="text-[10px] opacity-75">🍖${baseCosts[t].food} ⚙️${baseCosts[t].metal}</div>
+                                </button>
+                            `).join('')}
+                        </div>
+                        <div id="build-base-status" class="mt-1 text-xs hidden"></div>
                     ` : ''}
                 `;
                 tileInfoEl.classList.remove('hidden');
 
-                if (canFound) {
-                    const btn = document.getElementById('found-city-btn');
-                    const status = document.getElementById('found-city-status');
-                    btn.onclick = async () => {
-                        btn.disabled = true;
-                        btn.textContent = '...';
-                        status.classList.remove('hidden');
-                        status.textContent = '{{ __('Processing...') }}';
-                        try {
-                            const res = await fetch(foundTileUrl, {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrfToken },
-                                body: JSON.stringify({ x: tileX, y: tileY }),
-                            });
-                            const data = await res.json();
-                            if (data.success) {
-                                status.textContent = '{{ __('City founded!') }}';
-                                btn.textContent = '{{ __('Done') }}';
-                                btn.disabled = true;
-                                setTimeout(() => { tileInfoEl.classList.add('hidden'); }, 2000);
-                                await refetchTilesAndCities();
-                            } else {
-                                status.textContent = data.error || '{{ __('Error') }}';
-                                btn.disabled = false;
-                                btn.textContent = '{{ __('Found City') }}';
+                if (canBuild) {
+                    const cityBtn = document.getElementById('found-city-btn');
+                    const cityStatus = document.getElementById('found-city-status');
+                    if (cityBtn) {
+                        cityBtn.onclick = async () => {
+                            cityBtn.disabled = true;
+                            cityBtn.textContent = '...';
+                            cityStatus.classList.remove('hidden');
+                            cityStatus.textContent = '{{ __('Processing...') }}';
+                            try {
+                                const res = await fetch(foundTileUrl, {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrfToken },
+                                    body: JSON.stringify({ x: tileX, y: tileY }),
+                                });
+                                const data = await res.json();
+                                if (data.success) {
+                                    cityStatus.textContent = '{{ __('City founded!') }}';
+                                    cityBtn.textContent = '{{ __('Done') }}';
+                                    cityBtn.disabled = true;
+                                    setTimeout(() => { tileInfoEl.classList.add('hidden'); }, 2000);
+                                    await refetchTilesAndCities();
+                                } else {
+                                    cityStatus.textContent = data.error || '{{ __('Error') }}';
+                                    cityBtn.disabled = false;
+                                    cityBtn.textContent = '{{ __('Found City') }}';
+                                }
+                            } catch(e) {
+                                cityStatus.textContent = '{{ __('Error') }}';
+                                cityBtn.disabled = false;
+                                cityBtn.textContent = '{{ __('Found City') }}';
                             }
-                        } catch(e) {
-                            status.textContent = '{{ __('Error') }}';
-                            btn.disabled = false;
-                            btn.textContent = '{{ __('Found City') }}';
-                        }
-                    };
+                        };
+                    }
+
+                    const baseStatus = document.getElementById('build-base-status');
+                    document.querySelectorAll('.base-type-btn').forEach(btn => {
+                        btn.onclick = async () => {
+                            const type = btn.dataset.type;
+                            btn.disabled = true;
+                            btn.style.opacity = '0.5';
+                            baseStatus.classList.remove('hidden');
+                            baseStatus.textContent = '{{ __('Processing...') }}';
+                            try {
+                                const res = await fetch(createBaseUrl, {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrfToken },
+                                    body: JSON.stringify({ x: tileX, y: tileY, type }),
+                                });
+                                const data = await res.json();
+                                if (data.success) {
+                                    baseStatus.textContent = '{{ __('Base built!') }}';
+                                    btn.textContent = '{{ __('Done') }}';
+                                    setTimeout(() => { tileInfoEl.classList.add('hidden'); }, 2000);
+                                    await refetchTilesAndCities();
+                                } else {
+                                    baseStatus.textContent = data.error || '{{ __('Error') }}';
+                                    btn.disabled = false;
+                                    btn.style.opacity = '1';
+                                }
+                            } catch(e) {
+                                baseStatus.textContent = '{{ __('Error') }}';
+                                btn.disabled = false;
+                                btn.style.opacity = '1';
+                            }
+                        };
+                    });
                 }
             }
 

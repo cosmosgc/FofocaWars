@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\War;
 use App\Models\WarPlayer;
 use App\Models\Tile;
+use App\Models\Base;
 use App\Game\Map\MapGenerator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -26,7 +27,11 @@ class WarController extends Controller
         $cityCount = $player ? $war->cities()->where('owner_id', $player->id)->count() : 0;
         $canFoundCity = $player && $cityCount < $war->max_bases_per_player;
 
-        return view('wars.show', compact('war', 'player', 'cityCount', 'canFoundCity'));
+        $bases = $player ? Base::where('war_id', $war->id)
+            ->where('owner_id', $player->id)
+            ->get() : collect();
+
+        return view('wars.show', compact('war', 'player', 'cityCount', 'canFoundCity', 'bases'));
     }
 
     public function join(War $war, MapGenerator $generator)
@@ -131,8 +136,12 @@ class WarController extends Controller
 
         $cities = $war->cities()->where('owner_id', $player->id)->get();
 
+        $bases = Base::where('war_id', $war->id)
+            ->where('owner_id', $player->id)
+            ->get();
+
         $playerCityCount = $cities->count();
 
-        return view('wars.map', compact('war', 'player', 'cities', 'playerCityCount'));
+        return view('wars.map', compact('war', 'player', 'cities', 'bases', 'playerCityCount'));
     }
 }

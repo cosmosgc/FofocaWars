@@ -51,10 +51,13 @@ Route::middleware('auth')->group(function () {
     Route::post('/api/wars/{war}/notifications/{notification}/read', [\App\Http\Controllers\Api\NotificationController::class, 'read'])->name('api.wars.notifications.read');
     Route::get('/wars/{war}/cities/{city}', [CityController::class, 'show'])->name('cities.show');
     Route::post('/wars/{war}/cities/{city}/rename', [CityController::class, 'rename'])->name('cities.rename');
+    Route::get('/wars/{war}/bases/{base}', [\App\Http\Controllers\BaseController::class, 'show'])->name('bases.show');
 
     Route::get('/api/wars/{war}/tiles', [MapController::class, 'tiles'])->name('api.wars.tiles');
     Route::get('/api/wars/{war}/cities', [MapController::class, 'cities'])->name('api.wars.cities');
+    Route::get('/api/wars/{war}/bases', [MapController::class, 'bases'])->name('api.wars.bases');
     Route::post('/api/wars/{war}/tiles/found', [MapController::class, 'foundOnTile'])->name('api.wars.tiles.found');
+    Route::post('/api/wars/{war}/bases/create', [MapController::class, 'createBase'])->name('api.wars.bases.create');
     Route::get('/api/wars/{war}/resources', [ResourceController::class, 'index'])->name('api.wars.resources');
     Route::get('/api/wars/{war}/armies/movements', [\App\Http\Controllers\Api\ArmyController::class, 'movements'])->name('api.wars.armies.movements');
     Route::get('/api/wars/{war}/armies/map-movements', [\App\Http\Controllers\Api\ArmyController::class, 'mapMovements'])->name('api.wars.armies.map-movements');

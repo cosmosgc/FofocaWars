@@ -74,6 +74,32 @@
                         <p x-show="cities.length === 0" class="text-gray-500">{{ __('Loading resources...') }}</p>
                     </div>
                 </div>
+
+                <div class="bg-white dark:bg-gray-800 overflow-hidden shadow-sm sm:rounded-lg mt-6">
+                    <div class="p-6">
+                        <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">{{ __('Your Bases') }} ({{ $bases->count() }})</h3>
+                        @if($bases->isEmpty())
+                            <p class="text-gray-500 dark:text-gray-400">{{ __('You have no bases in this war.') }}</p>
+                        @else
+                            <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                                @php $baseColors = ['resource' => '#22c55e', 'military' => '#ef4444', 'trade' => '#3b82f6', 'alliance' => '#a855f7']; @endphp
+                                @foreach($bases as $base)
+                                    <a href="{{ route('bases.show', [$war, $base]) }}"
+                                       class="block border dark:border-gray-700 rounded-lg p-3 hover:bg-gray-50 dark:hover:bg-gray-700 transition">
+                                        <div class="flex items-center gap-2 mb-1">
+                                            <span class="w-2.5 h-2.5 rounded inline-block" style="background: {{ $baseColors[$base->type] ?? '#6b7280' }}"></span>
+                                            <h4 class="font-medium text-gray-900 dark:text-gray-100 text-sm">{{ $base->name }}</h4>
+                                        </div>
+                                        <div class="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+                                            <span>({{ $base->tile_x }}, {{ $base->tile_y }})</span>
+                                            <span>{{ __('Lv.') }} {{ $base->level }}</span>
+                                        </div>
+                                    </a>
+                                @endforeach
+                            </div>
+                        @endif
+                    </div>
+                </div>
             @else
                 <div class="bg-white dark:bg-gray-800 overflow-hidden shadow-sm sm:rounded-lg">
                     <div class="p-6 text-gray-900 dark:text-gray-100">
