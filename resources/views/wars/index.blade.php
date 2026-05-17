@@ -25,7 +25,7 @@
                                 {{ $war->name }}
                             </h3>
                             <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                                {{ __('Theme') }}: {{ __(ucfirst($war->theme)) }}
+                                {{ __('Theme') }}: {{ __(ucfirst($war->themeData?->label ?? $war->theme)) }}
                             </p>
                             <p class="text-sm text-gray-600 dark:text-gray-400">
                                 {{ __('Status') }}: <span class="capitalize">{{ __($war->status) }}</span>

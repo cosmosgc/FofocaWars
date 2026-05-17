@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\Theme;
 use App\Models\War;
 use Illuminate\Http\Request;
 
@@ -16,14 +17,17 @@ class WarController extends Controller
 
     public function create()
     {
-        return view('admin.wars.create');
+        $themes = Theme::orderBy('label')->get();
+        return view('admin.wars.create', compact('themes'));
     }
 
     public function store(Request $request)
     {
+        $themeNames = Theme::pluck('name')->toArray();
+
         $validated = $request->validate([
             'name' => 'required|string|max:255',
-            'theme' => 'required|string|in:medieval,modern,space',
+            'theme' => 'required|string|in:' . implode(',', $themeNames),
             'map_width' => 'required|integer|min:10|max:500',
             'map_height' => 'required|integer|min:10|max:500',
             'resource_multiplier' => 'required|numeric|min:0.1|max:10',
@@ -40,14 +44,17 @@ class WarController extends Controller
 
     public function edit(War $war)
     {
-        return view('admin.wars.edit', compact('war'));
+        $themes = Theme::orderBy('label')->get();
+        return view('admin.wars.edit', compact('war', 'themes'));
     }
 
     public function update(Request $request, War $war)
     {
+        $themeNames = Theme::pluck('name')->toArray();
+
         $validated = $request->validate([
             'name' => 'required|string|max:255',
-            'theme' => 'required|string|in:medieval,modern,space',
+            'theme' => 'required|string|in:' . implode(',', $themeNames),
             'map_width' => 'required|integer|min:10|max:500',
             'map_height' => 'required|integer|min:10|max:500',
             'resource_multiplier' => 'required|numeric|min:0.1|max:10',

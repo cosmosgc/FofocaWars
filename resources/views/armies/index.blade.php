@@ -45,7 +45,12 @@
                                          @click="cityId ? doTrain({{ $ut->id }}) : null"
                                          :class="!cityId ? 'opacity-50' : (busy === {{ $ut->id }} ? 'opacity-50 pointer-events-none' : '')"
                                          x-data="{ w: {{ $ut->wood_cost }}, s: {{ $ut->stone_cost }}, f: {{ $ut->food_cost }}, m: {{ $ut->metal_cost }}, tt: {{ $ut->training_time }} }">
-                                        <div class="font-medium text-gray-900 dark:text-gray-100">{{ $ut->name }}</div>
+                                         <div class="font-medium text-gray-900 dark:text-gray-100 flex items-center justify-center gap-1">
+                                             @if($ut->image)
+                                                 <img src="{{ $ut->image }}" alt="{{ $ut->name }}" class="w-4 h-4 object-contain inline-block">
+                                             @endif
+                                             {{ $ut->name }}
+                                         </div>
                                         <div class="text-xs text-gray-500 mt-0.5">{{ $ut->attack }}⚔️ {{ $ut->defense }}🛡️</div>
                                         <div class="text-xs text-gray-500 mt-1">
                                             🪵<span x-text="w * qty"></span> 🪨<span x-text="s * qty"></span> 🍖<span x-text="f * qty"></span> ⚙️<span x-text="m * qty"></span>
@@ -112,7 +117,12 @@
                             <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
                                 @foreach($unitTypes as $ut)
                                     <div class="border dark:border-gray-700 rounded p-2 text-center">
-                                        <div class="text-xs font-medium text-gray-900 dark:text-gray-100">{{ $ut->name }}</div>
+                                        <div class="text-xs font-medium text-gray-900 dark:text-gray-100 flex items-center justify-center gap-1">
+                                            @if($ut->image)
+                                                <img src="{{ $ut->image }}" alt="{{ $ut->name }}" class="w-3 h-3 object-contain">
+                                            @endif
+                                            {{ $ut->name }}
+                                        </div>
                                         <div class="text-xs text-gray-500">{{ $ut->attack }}/{{ $ut->defense }}</div>
                                         <input type="number" name="units[{{ $ut->id }}]" min="0" value="0"
                                                class="mt-1 w-full text-center text-sm border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 rounded">

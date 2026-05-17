@@ -16,12 +16,12 @@
                     </div>
 
                     <div id="map-legend" class="absolute bottom-2 left-2 bg-black/60 text-white text-xs px-2 py-1 rounded space-y-0.5 select-none pointer-events-none z-10">
-                        <div class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm shrink-0" style="background:#90c96a"></span> {{ __('Plain') }}</div>
-                        <div class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm shrink-0" style="background:#2d6a27"></span> {{ __('Forest') }}</div>
-                        <div class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm shrink-0" style="background:#8a7f6e"></span> {{ __('Mountain') }}</div>
-                        <div class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm shrink-0" style="background:#4a90d9"></span> {{ __('Water') }}</div>
-                        <div class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm shrink-0" style="background:#e8d5a3"></span> {{ __('Desert') }}</div>
-                        <div class="flex items-center gap-1.5 mt-1"><span class="w-2.5 h-2.5 rounded-full shrink-0" style="background:#f5a623"></span> {{ __('City') }}</div>
+                        <div class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm shrink-0" style="background:{{ $themeColors['plain'] }}"></span> {{ __('Plain') }}</div>
+                        <div class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm shrink-0" style="background:{{ $themeColors['forest'] }}"></span> {{ __('Forest') }}</div>
+                        <div class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm shrink-0" style="background:{{ $themeColors['mountain'] }}"></span> {{ __('Mountain') }}</div>
+                        <div class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm shrink-0" style="background:{{ $themeColors['water'] }}"></span> {{ __('Water') }}</div>
+                        <div class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm shrink-0" style="background:{{ $themeColors['desert'] }}"></span> {{ __('Desert') }}</div>
+                        <div class="flex items-center gap-1.5 mt-1"><span class="w-2.5 h-2.5 rounded-full shrink-0" style="background:{{ $themeConfig['colors']['city']['fill'] ?? '#f5a623' }}"></span> {{ __('City') }}</div>
                     </div>
 
                     <div id="city-info" class="absolute top-1/2 right-4 -translate-y-1/2 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 p-4 pr-7 hidden min-w-[240px] text-sm text-gray-900 dark:text-gray-100 z-20">
@@ -132,6 +132,10 @@
             const movementsUrl = "{{ route('api.wars.armies.map-movements', $war) }}";
             const foundTileUrl = "{{ route('api.wars.tiles.found', $war) }}";
             const createBaseUrl = "{{ route('api.wars.bases.create', $war) }}";
+            const recentBattlesUrl = "{{ route('api.wars.battles.recent', $war) }}";
+            const battleEffect = '{{ $themeConfig["battle_effect"] ?? "explosion" }}';
+            const themeSprites = @json($themeSprites);
+            const spriteCache = {};
             const cityUrls = @json($cities->mapWithKeys(fn($c) => [$c->id => route('cities.show', [$war, $c])]));
             const playerCityCount = {{ $playerCityCount }};
             const constructionSpeed = {{ $war->construction_speed }};
@@ -143,7 +147,7 @@
             const app = new PIXI.Application({
                 width,
                 height,
-                backgroundColor: 0x1a1a2e,
+                backgroundColor: 0x111118,
                 antialias: true,
                 resolution: window.devicePixelRatio || 1,
                 autoDensity: true,
@@ -155,13 +159,7 @@
             app.stage.addChild(worldContainer);
 
             const tileSize = 32;
-            const terrainColors = {
-                plain: 0x90c96a,
-                forest: 0x2d6a27,
-                mountain: 0x8a7f6e,
-                water: 0x4a90d9,
-                desert: 0xe8d5a3,
-            };
+            const terrainColors = @json($themeColors);
 
             let tiles = [];
             let cities = [];
@@ -275,6 +273,71 @@
 
             rebuildMovements();
 
+            const battleEffects = new PIXI.Container();
+            worldContainer.addChild(battleEffects);
+            let activeEffects = [];
+
+            function createBattleEffect(x, y, type) {
+                const gfx = new PIXI.Graphics();
+                const tx = x * tileSize + tileSize / 2;
+                const ty = y * tileSize + tileSize / 2;
+                const colors = {
+                    explosion: [0xff6600, 0xff3300, 0xffcc00],
+                    sandstorm: [0xd4a853, 0xc9943e, 0xe8c87a],
+                    snow: [0xffffff, 0xccddff, 0x99bbee],
+                    cyber: [0x00ffcc, 0xff00ff, 0x00aaff],
+                };
+                const pal = colors[type] || colors.explosion;
+                const rings = 5;
+                const particles = [];
+                for (let i = 0; i < 20; i++) {
+                    const angle = (Math.PI * 2 * i) / 20;
+                    const speed = 1.5 + Math.random() * 3;
+                    particles.push({ angle, speed, dist: 0, maxDist: 20 + Math.random() * 30 });
+                }
+                let frame = 0;
+                const maxFrames = 30;
+                const interval = setInterval(() => {
+                    gfx.clear();
+                    frame++;
+                    if (frame > maxFrames) {
+                        clearInterval(interval);
+                        battleEffects.removeChild(gfx);
+                        return;
+                    }
+                    for (const p of particles) {
+                        p.dist = (frame / maxFrames) * p.maxDist;
+                        const px = tx + Math.cos(p.angle) * p.dist;
+                        const py = ty + Math.sin(p.angle) * p.dist;
+                        const alpha = 1 - frame / maxFrames;
+                        const size = Math.max(1, 4 * (1 - frame / maxFrames));
+                        gfx.beginFill(pal[frame % 3], alpha);
+                        gfx.drawCircle(px, py, size);
+                        gfx.endFill();
+                    }
+                    for (let r = 0; r < rings; r++) {
+                        const radius = 10 + (frame / maxFrames) * 40 + r * 8;
+                        const alpha = Math.max(0, 0.4 * (1 - frame / maxFrames) - r * 0.05);
+                        gfx.lineStyle(1.5, pal[r % 3], alpha);
+                        gfx.drawCircle(tx, ty, radius);
+                    }
+                }, 50);
+                battleEffects.addChild(gfx);
+            }
+
+            let lastBattleFetch = 0;
+            setInterval(async () => {
+                try {
+                    const since = new Date(lastBattleFetch || Date.now() - 300000).toISOString();
+                    const r = await fetch(recentBattlesUrl + '?since=' + encodeURIComponent(since));
+                    const battles = await r.json();
+                    for (const b of battles) {
+                        createBattleEffect(b.x, b.y, battleEffect);
+                    }
+                    lastBattleFetch = Date.now();
+                } catch(e) {}
+            }, 15000);
+
             app.ticker.add(() => {
                 const now = Date.now();
                 for (const { dot, m } of movDots) {
@@ -335,7 +398,8 @@
                     tiles = newTiles;
                     cities = newCities;
                     bases = newBases;
-                    worldContainer.removeChild(tileGraphics);
+                    tileGraphics.removeChildren();
+                    tileGraphics.clear();
                     worldContainer.removeChild(gridGraphics);
                     redrawTiles();
                     redrawGrid();
@@ -344,15 +408,34 @@
                 } catch(e) {}
             }
 
+            function hexToNum(h) { return parseInt(h.replace('#',''), 16); }
+
+            function loadSprite(url) {
+                if (spriteCache[url]) return spriteCache[url];
+                const texture = PIXI.Texture.from(url);
+                spriteCache[url] = texture;
+                return texture;
+            }
+
             function redrawTiles() {
                 tileGraphics.clear();
                 for (const tile of tiles) {
-                    const color = terrainColors[tile.terrain_type] || terrainColors.plain;
                     const px = tile.x * tileSize;
                     const py = tile.y * tileSize;
-                    tileGraphics.beginFill(color);
-                    tileGraphics.drawRect(px, py, tileSize, tileSize);
-                    tileGraphics.endFill();
+                    const spriteKey = 'terrain/' + tile.terrain_type;
+                    if (themeSprites[spriteKey]) {
+                        const sprite = new PIXI.Sprite(loadSprite(themeSprites[spriteKey]));
+                        sprite.x = px;
+                        sprite.y = py;
+                        sprite.width = tileSize;
+                        sprite.height = tileSize;
+                        tileGraphics.addChild(sprite);
+                    } else {
+                        const color = hexToNum(terrainColors[tile.terrain_type] || terrainColors.plain);
+                        tileGraphics.beginFill(color);
+                        tileGraphics.drawRect(px, py, tileSize, tileSize);
+                        tileGraphics.endFill();
+                    }
                     if (tile.owner_id) {
                         tileGraphics.beginFill(0xffffff, 0.12);
                         tileGraphics.drawRect(px, py, tileSize, tileSize);
@@ -384,13 +467,29 @@
                     const cx = city.tile_x * tileSize + tileSize / 2;
                     const cy = city.tile_y * tileSize + tileSize / 2;
 
-                    const cityGfx = new PIXI.Graphics();
-                    cityGfx.beginFill(0xf5a623);
-                    cityGfx.drawCircle(cx, cy, 8);
-                    cityGfx.endFill();
-                    cityGfx.beginFill(0xffd700, 0.3);
-                    cityGfx.drawCircle(cx, cy, 14);
-                    cityGfx.endFill();
+                    const cc = new PIXI.Container();
+                    cc._isCityContainer = true;
+
+                    if (themeSprites.city) {
+                        const sprite = new PIXI.Sprite(loadSprite(themeSprites.city));
+                        sprite.anchor.set(0.5, 0.5);
+                        sprite.x = cx;
+                        sprite.y = cy;
+                        sprite.width = 24;
+                        sprite.height = 24;
+                        cc.addChild(sprite);
+                    } else {
+                        const cityFill = hexToNum('{{ $themeConfig["colors"]["city"]["fill"] ?? "#f5a623" }}');
+                        const cityGlow = hexToNum('{{ $themeConfig["colors"]["city"]["stroke"] ?? "#ffd700" }}');
+                        const cityGfx = new PIXI.Graphics();
+                        cityGfx.beginFill(cityFill);
+                        cityGfx.drawCircle(cx, cy, 8);
+                        cityGfx.endFill();
+                        cityGfx.beginFill(cityGlow, 0.3);
+                        cityGfx.drawCircle(cx, cy, 14);
+                        cityGfx.endFill();
+                        cc.addChild(cityGfx);
+                    }
 
                     const label = new PIXI.Text(city.name, {
                         fontSize: 11,
@@ -401,10 +500,8 @@
                     label.anchor.set(0.5, 0);
                     label.x = cx;
                     label.y = cy + 14;
+                    cc.addChild(label);
 
-                    const cc = new PIXI.Container();
-                    cc._isCityContainer = true;
-                    cc.addChild(cityGfx, label);
                     cc.eventMode = 'static';
                     cc.cursor = 'pointer';
                     cc.on('pointerdown', (e) => {
@@ -420,7 +517,12 @@
                 const oldBases = worldContainer.children.filter(c => c._isBaseContainer);
                 oldBases.forEach(c => worldContainer.removeChild(c));
 
-                const baseColors = { resource: 0x22c55e, military: 0xef4444, trade: 0x3b82f6, alliance: 0xa855f7 };
+                const baseColors = {
+                    resource: hexToNum('{{ $themeConfig["colors"]["bases"]["resource"] ?? "#22c55e" }}'),
+                    military: hexToNum('{{ $themeConfig["colors"]["bases"]["military"] ?? "#ef4444" }}'),
+                    trade: hexToNum('{{ $themeConfig["colors"]["bases"]["trade"] ?? "#3b82f6" }}'),
+                    alliance: hexToNum('{{ $themeConfig["colors"]["bases"]["alliance"] ?? "#a855f7" }}'),
+                };
 
                 for (const base of bases) {
                     const cx = base.tile_x * tileSize + tileSize / 2;

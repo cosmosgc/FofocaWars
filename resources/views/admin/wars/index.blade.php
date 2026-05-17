@@ -4,10 +4,16 @@
             <h2 class="font-semibold text-xl text-gray-800 dark:text-gray-200 leading-tight">
                 {{ __('Admin') }} — {{ __('Wars') }}
             </h2>
-            <a href="{{ route('admin.wars.create') }}"
-               class="inline-flex items-center px-4 py-2 bg-green-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-green-500">
-                + {{ __('Create War') }}
-            </a>
+            <div class="flex gap-2">
+                <a href="{{ route('admin.themes.index') }}"
+                   class="inline-flex items-center px-4 py-2 bg-purple-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-purple-500">
+                    {{ __('Themes') }}
+                </a>
+                <a href="{{ route('admin.wars.create') }}"
+                   class="inline-flex items-center px-4 py-2 bg-green-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-green-500">
+                    + {{ __('Create War') }}
+                </a>
+            </div>
         </div>
     </x-slot>
 
@@ -38,7 +44,7 @@
                                 <tr class="border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50">
                                     <td class="px-4 py-3 text-gray-500 dark:text-gray-400">#{{ $war->id }}</td>
                                     <td class="px-4 py-3 font-medium text-gray-900 dark:text-gray-100">{{ $war->name }}</td>
-                                    <td class="px-4 py-3 text-gray-600 dark:text-gray-400">{{ __(ucfirst($war->theme)) }}</td>
+                                    <td class="px-4 py-3 text-gray-600 dark:text-gray-400">{{ __(ucfirst($war->themeData?->label ?? $war->theme)) }}</td>
                                     <td class="px-4 py-3">
                                         <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium
                                             @if($war->status === 'running') bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300

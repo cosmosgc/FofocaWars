@@ -27,8 +27,8 @@
                             <div>
                                 <x-input-label for="theme" :value="__('Theme')" />
                                 <select id="theme" name="theme" class="mt-1 block w-full border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 focus:border-indigo-500 dark:focus:border-indigo-600 focus:ring-indigo-500 dark:focus:ring-indigo-600 rounded-md shadow-sm">
-                                    @foreach(['medieval', 'modern', 'space'] as $t)
-                                        <option value="{{ $t }}" {{ old('theme', $war->theme) === $t ? 'selected' : '' }}>{{ __(ucfirst($t)) }}</option>
+                                    @foreach($themes as $t)
+                                        <option value="{{ $t->name }}" {{ old('theme', $war->theme) === $t->name ? 'selected' : '' }}>{{ __($t->label) }}</option>
                                     @endforeach
                                 </select>
                                 <x-input-error :messages="$errors->get('theme')" class="mt-2" />

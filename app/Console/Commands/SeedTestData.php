@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Models\User;
 use App\Models\War;
+use App\Models\Theme;
 use App\Game\Map\MapGenerator;
 use App\Models\WarPlayer;
 use App\Models\Tile;

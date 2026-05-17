@@ -111,7 +111,10 @@
                             <h4 class="text-sm font-medium text-gray-600 dark:text-gray-400 mb-2">{{ __('Garrison') }}</h4>
                             <div class="flex flex-wrap gap-2">
                                 @foreach($cityUnits as $u)
-                                    <span class="inline-flex items-center px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded text-xs font-medium text-gray-800 dark:text-gray-200">
+                                    <span class="inline-flex items-center px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded text-xs font-medium text-gray-800 dark:text-gray-200 gap-1">
+                                        @if($u->unitType->image)
+                                            <img src="{{ $u->unitType->image }}" alt="{{ $u->unitType->name }}" class="w-3 h-3 object-contain">
+                                        @endif
                                         {{ $u->unitType->name }} x{{ $u->quantity }}
                                     </span>
                                 @endforeach
@@ -132,7 +135,12 @@
                                      @click="doTrain({{ $ut->id }})"
                                      x-data="{ ut: {{ $ut->id }}, w: {{ $ut->wood_cost }}, s: {{ $ut->stone_cost }}, f: {{ $ut->food_cost }}, m: {{ $ut->metal_cost }}, tt: {{ $ut->training_time }} }"
                                      :class="busy === ut ? 'opacity-50 pointer-events-none' : ''">
-                                    <div class="font-medium text-gray-900 dark:text-gray-100">{{ $ut->name }}</div>
+                                    <div class="font-medium text-gray-900 dark:text-gray-100 flex items-center justify-center gap-1">
+                                        @if($ut->image)
+                                            <img src="{{ $ut->image }}" alt="{{ $ut->name }}" class="w-4 h-4 object-contain inline-block">
+                                        @endif
+                                        {{ $ut->name }}
+                                    </div>
                                     <div class="text-xs text-gray-500 mt-0.5">{{ $ut->attack }}⚔️ {{ $ut->defense }}🛡️</div>
                                     <div class="text-xs text-gray-500 mt-1">
                                         🪵<span x-text="w * qty"></span> 🪨<span x-text="s * qty"></span> 🍖<span x-text="f * qty"></span> ⚙️<span x-text="m * qty"></span>

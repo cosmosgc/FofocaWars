@@ -16,6 +16,12 @@
 
     <div class="py-12">
         <div class="max-w-4xl mx-auto sm:px-6 lg:px-8 space-y-6">
+            @if(session('success'))
+                <div class="bg-green-100 dark:bg-green-900 border border-green-400 dark:border-green-700 text-green-700 dark:text-green-300 px-4 py-3 rounded">
+                    {{ session('success') }}
+                </div>
+            @endif
+
             <div class="bg-white dark:bg-gray-800 overflow-hidden shadow-sm sm:rounded-lg">
                 <div class="p-6">
                     <div class="grid grid-cols-2 gap-6">
@@ -58,6 +64,18 @@
                             </p>
                         </div>
                     </div>
+
+                    <hr class="my-4 border-gray-300 dark:border-gray-600">
+
+                    <form method="POST" action="{{ route('bases.rename', [$war, $base]) }}" class="flex items-end gap-4">
+                        @csrf
+                        <div class="grow">
+                            <x-input-label for="rename" :value="__('Rename Base')" />
+                            <x-text-input id="rename" name="name" type="text" class="mt-1 block w-full" value="{{ $base->name }}" required maxlength="100" />
+                            <x-input-error :messages="$errors->get('name')" class="mt-2" />
+                        </div>
+                        <x-primary-button>{{ __('Rename') }}</x-primary-button>
+                    </form>
                 </div>
             </div>
 

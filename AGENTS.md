@@ -6,6 +6,7 @@
 - **`php artisan db:seed --class=UnitTypeSeeder --force`** — seed 6 global unit types
 - **`php artisan game:seed --users=2`** — creates war + 2 users (test1@example.com is admin)
 - **`php artisan game:create-war "Name" --width=100 --height=100`** — CLI war creation
+- **`php artisan db:seed --class=ThemeSeeder --force`** — seed 4 themes (medieval/default, desert, winter, neon)
 - **`php artisan game:tick-analytics`** — manual analytics snapshot
 - **`npm run dev`** — Vite on port 3000, proxies `/api` to Laravel 8000
 - **`php artisan serve`** — Laravel on port 8000
@@ -24,6 +25,16 @@
 - **All controllers**: `app/Http/Controllers/`, API controllers under `Api/`, admin under `Admin/`.
 - **PixiJS v7.3.2**: loaded from CDN (`pixi.min.js`), all map rendering is inline JS in `resources/views/wars/map.blade.php`.
 - **Alpine.js**: used for resource panel polling (`x-data="resources()"`) and profile avatar preview.
+
+## Theme Engine (Phase 5)
+- **`themes` table**: `name` (string, FK target from `wars.theme`), `label`, `description`, `is_default`, `config` (JSON)
+- **`ThemeService`** (`app/Game/Theme/ThemeService.php`): resolves theme config from DB, provides `terrainColors()`, `legendColors()`, `cssVariables()` per war
+- **4 seeded themes**: medieval (default), desert, winter, neon — each with `config.colors.terrain`, `config.battle_effect`, `config.css`
+- **Map rendering**: terrain colors, city colors, base colors, and battle effect type are all driven by `$themeConfig` / `$themeColors` passed from `WarController.map()`
+- **Battle effects**: PixiJS particle explosion animation on the map at battle tile location; effect type (`explosion` / `sandstorm` / `snow` / `cyber`) comes from `themeConfig.battle_effect`
+- **Admin**: theme dropdown in war create/edit loads from `Theme::all()`, validation uses `Theme::pluck('name')`
+- **War.themeData()**: `BelongsTo` relationship to `Theme` via `theme` → `name`
+- **Add new theme**: create row in `themes` table with full config JSON; no code changes needed. See `THEMES.md` for complete reference.
 
 ## Key conventions
 - War lifecycle: `setup` → `running` → `ended`. Players can join even while `running`.
@@ -51,5 +62,10 @@
 - No queue workers in dev (sync driver). In prod, `queue:listen` handles deferred ticks.
 - Scheduler (`routes/console.php`): `game:tick-resources`, `game:tick-armies`, `game:tick-training` every minute; `game:tick-analytics` every 10 min. Requires cron on shared hosting.
 - Map tile coordinates in API responses use `x`, `y` columns on `tiles` table, not lat/lng.
+- **Theme docs**: see `THEMES.md` at project root for full reference on creating custom themes.
 - Analytics (`game:tick-analytics`) snapshots resource/army/territory history every 10 min via scheduler. Manual: `php artisan game:tick-analytics`.
 - Chart.js v4.4.7 loaded from CDN in analytics view.
+- **Admin theme CRUD**: `/admin/themes` — full theme management with color pickers, battle effect dropdown, sprite uploads.
+- **Sprites**: themes support `sprites/terrain/{type}` and `sprites/city` in config. Upload PNG/GIF/JPG/WebP via admin UI → stored in `public/themes/{name}/`. PixiJS map renders sprites when available, falls back to solid colors.
+- **Unit images**: `unit_types.image` column stores URL to unit sprite. Displayed as small thumbnails in garrison and training views.
+- **Base rename**: rename form on bases show page at `POST /wars/{war}/bases/{base}/rename`.

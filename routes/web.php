@@ -52,6 +52,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/wars/{war}/cities/{city}', [CityController::class, 'show'])->name('cities.show');
     Route::post('/wars/{war}/cities/{city}/rename', [CityController::class, 'rename'])->name('cities.rename');
     Route::get('/wars/{war}/bases/{base}', [\App\Http\Controllers\BaseController::class, 'show'])->name('bases.show');
+    Route::post('/wars/{war}/bases/{base}/rename', [\App\Http\Controllers\BaseController::class, 'rename'])->name('bases.rename');
 
     Route::get('/api/wars/{war}/tiles', [MapController::class, 'tiles'])->name('api.wars.tiles');
     Route::get('/api/wars/{war}/cities', [MapController::class, 'cities'])->name('api.wars.cities');
@@ -67,6 +68,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/api/wars/{war}/training-queue', [\App\Http\Controllers\Api\ArmyController::class, 'trainingQueue'])->name('api.wars.training-queue');
     Route::get('/api/wars/{war}/garrisons', [\App\Http\Controllers\Api\ArmyController::class, 'garrisons'])->name('api.wars.garrisons');
     Route::get('/api/wars/{war}/battles/reports', [\App\Http\Controllers\Api\BattleController::class, 'reports'])->name('api.wars.battles.reports');
+    Route::get('/api/wars/{war}/battles/recent', [\App\Http\Controllers\Api\BattleController::class, 'recent'])->name('api.wars.battles.recent');
     Route::get('/wars/{war}/analytics', [\App\Http\Controllers\AnalyticsController::class, 'index'])->name('wars.analytics');
 
     Route::middleware('admin')->prefix('admin')->name('admin.')->group(function () {
@@ -76,6 +78,12 @@ Route::middleware('auth')->group(function () {
         Route::get('/wars/{war}/edit', [\App\Http\Controllers\Admin\WarController::class, 'edit'])->name('wars.edit');
         Route::put('/wars/{war}', [\App\Http\Controllers\Admin\WarController::class, 'update'])->name('wars.update');
         Route::delete('/wars/{war}', [\App\Http\Controllers\Admin\WarController::class, 'destroy'])->name('wars.destroy');
+        Route::get('/themes', [\App\Http\Controllers\Admin\ThemeController::class, 'index'])->name('themes.index');
+        Route::get('/themes/create', [\App\Http\Controllers\Admin\ThemeController::class, 'create'])->name('themes.create');
+        Route::post('/themes', [\App\Http\Controllers\Admin\ThemeController::class, 'store'])->name('themes.store');
+        Route::get('/themes/{theme}/edit', [\App\Http\Controllers\Admin\ThemeController::class, 'edit'])->name('themes.edit');
+        Route::put('/themes/{theme}', [\App\Http\Controllers\Admin\ThemeController::class, 'update'])->name('themes.update');
+        Route::delete('/themes/{theme}', [\App\Http\Controllers\Admin\ThemeController::class, 'destroy'])->name('themes.destroy');
     });
 });
 

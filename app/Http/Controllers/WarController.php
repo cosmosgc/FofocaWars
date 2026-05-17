@@ -6,7 +6,9 @@ use App\Models\War;
 use App\Models\WarPlayer;
 use App\Models\Tile;
 use App\Models\Base;
+use App\Models\Theme;
 use App\Game\Map\MapGenerator;
+use App\Game\Theme\ThemeService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
@@ -128,7 +130,7 @@ class WarController extends Controller
         return back()->with('success', 'War started.');
     }
 
-    public function map(War $war)
+    public function map(War $war, ThemeService $themeService)
     {
         $player = WarPlayer::where('war_id', $war->id)
             ->where('user_id', Auth::id())
@@ -141,7 +143,17 @@ class WarController extends Controller
             ->get();
 
         $playerCityCount = $cities->count();
+        $themeColors = $themeService->legendColors($war);
+        $themeConfig = $themeService->forWar($war);
 
-        return view('wars.map', compact('war', 'player', 'cities', 'bases', 'playerCityCount'));
+        $themeSprites = [];
+        foreach (['sprites/terrain/plain', 'sprites/terrain/forest', 'sprites/terrain/mountain', 'sprites/terrain/water', 'sprites/terrain/desert', 'sprites/city'] as $key) {
+            if (!empty($themeConfig[$key])) {
+                $shortKey = str_replace('sprites/', '', $key);
+                $themeSprites[$shortKey] = $themeConfig[$key];
+            }
+        }
+
+        return view('wars.map', compact('war', 'player', 'cities', 'bases', 'playerCityCount', 'themeColors', 'themeConfig', 'themeSprites'));
     }
 }

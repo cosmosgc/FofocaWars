@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class War extends Model
 {
@@ -27,6 +28,11 @@ class War extends Model
             'troop_speed_multiplier' => 'decimal:2',
             'construction_speed' => 'decimal:2',
         ];
+    }
+
+    public function themeData(): BelongsTo
+    {
+        return $this->belongsTo(Theme::class, 'theme', 'name');
     }
 
     public function players(): BelongsToMany

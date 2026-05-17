@@ -10,7 +10,7 @@ class UnitType extends Model
     protected $fillable = [
         'war_id', 'name', 'role', 'attack', 'defense', 'speed',
         'wood_cost', 'stone_cost', 'food_cost', 'metal_cost',
-        'population_cost', 'tier',
+        'population_cost', 'tier', 'image',
     ];
 
     public function war(): BelongsTo
