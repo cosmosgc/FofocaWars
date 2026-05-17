@@ -6,6 +6,7 @@
 - **`php artisan db:seed --class=UnitTypeSeeder --force`** — seed 6 global unit types
 - **`php artisan game:seed --users=2`** — creates war + 2 users (test1@example.com is admin)
 - **`php artisan game:create-war "Name" --width=100 --height=100`** — CLI war creation
+- **`php artisan game:tick-analytics`** — manual analytics snapshot
 - **`npm run dev`** — Vite on port 3000, proxies `/api` to Laravel 8000
 - **`php artisan serve`** — Laravel on port 8000
 - **`composer dev`** — runs `serve` + `queue:listen` + `pail` + `vite` concurrently
@@ -48,5 +49,7 @@
 ## Gotchas
 - Avatar files stored directly in `public/avatars/` (not Storage disk). Accessor: `url('avatars/' . $filename)`.
 - No queue workers in dev (sync driver). In prod, `queue:listen` handles deferred ticks.
-- Scheduler (`routes/console.php`): `game:tick-*` every minute. Requires cron on shared hosting.
+- Scheduler (`routes/console.php`): `game:tick-resources`, `game:tick-armies`, `game:tick-training` every minute; `game:tick-analytics` every 10 min. Requires cron on shared hosting.
 - Map tile coordinates in API responses use `x`, `y` columns on `tiles` table, not lat/lng.
+- Analytics (`game:tick-analytics`) snapshots resource/army/territory history every 10 min via scheduler. Manual: `php artisan game:tick-analytics`.
+- Chart.js v4.4.7 loaded from CDN in analytics view.

@@ -67,6 +67,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/api/wars/{war}/training-queue', [\App\Http\Controllers\Api\ArmyController::class, 'trainingQueue'])->name('api.wars.training-queue');
     Route::get('/api/wars/{war}/garrisons', [\App\Http\Controllers\Api\ArmyController::class, 'garrisons'])->name('api.wars.garrisons');
     Route::get('/api/wars/{war}/battles/reports', [\App\Http\Controllers\Api\BattleController::class, 'reports'])->name('api.wars.battles.reports');
+    Route::get('/wars/{war}/analytics', [\App\Http\Controllers\AnalyticsController::class, 'index'])->name('wars.analytics');
 
     Route::middleware('admin')->prefix('admin')->name('admin.')->group(function () {
         Route::get('/wars', [\App\Http\Controllers\Admin\WarController::class, 'index'])->name('wars.index');
