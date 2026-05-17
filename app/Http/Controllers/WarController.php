@@ -154,6 +154,16 @@ class WarController extends Controller
             }
         }
 
-        return view('wars.map', compact('war', 'player', 'cities', 'bases', 'playerCityCount', 'themeColors', 'themeConfig', 'themeSprites'));
+        $spritesheetConfig = [];
+        if (!empty($themeConfig['spritesheet_url'])) {
+            $spritesheetConfig = [
+                'url' => $themeConfig['spritesheet_url'],
+                'tile_w' => $themeConfig['spritesheet_tile_w'] ?? 32,
+                'tile_h' => $themeConfig['spritesheet_tile_h'] ?? 32,
+                'map' => $themeConfig['spritesheet_map'] ?? [],
+            ];
+        }
+
+        return view('wars.map', compact('war', 'player', 'cities', 'bases', 'playerCityCount', 'themeColors', 'themeConfig', 'themeSprites', 'spritesheetConfig'));
     }
 }

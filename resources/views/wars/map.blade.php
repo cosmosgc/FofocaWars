@@ -136,6 +136,40 @@
             const battleEffect = '{{ $themeConfig["battle_effect"] ?? "explosion" }}';
             const themeSprites = @json($themeSprites);
             const spriteCache = {};
+            const miniSpriteCache = {};
+            const spritesheetConfig = @json($spritesheetConfig);
+            let sheetSubTextures = {};
+            let sheetReady = false;
+
+            function seededRandom(seed) {
+                const x = Math.sin(seed) * 10000;
+                return x - Math.floor(x);
+            }
+
+            if (spritesheetConfig.url) {
+                const img = new Image();
+                img.crossOrigin = 'anonymous';
+                img.onload = () => {
+                    const baseTex = PIXI.BaseTexture.from(img);
+                    for (const [key, picks] of Object.entries(spritesheetConfig.map)) {
+                        const arr = Array.isArray(picks) ? picks : [picks];
+                        sheetSubTextures[key] = arr.map(p =>
+                            new PIXI.Texture(baseTex, new PIXI.Rectangle(
+                                p.col * spritesheetConfig.tile_w,
+                                p.row * spritesheetConfig.tile_h,
+                                spritesheetConfig.tile_w,
+                                spritesheetConfig.tile_h
+                            ))
+                        );
+                    }
+                    sheetReady = true;
+                    tileGraphics.removeChildren();
+                    tileGraphics.clear();
+                    redrawTiles();
+                    redrawCities();
+                };
+                img.src = spritesheetConfig.url;
+            }
             const cityUrls = @json($cities->mapWithKeys(fn($c) => [$c->id => route('cities.show', [$war, $c])]));
             const playerCityCount = {{ $playerCityCount }};
             const constructionSpeed = {{ $war->construction_speed }};
@@ -417,24 +451,78 @@
                 return texture;
             }
 
+            function getMiniTextures(data) {
+                const tileW = data.tile_w || 32;
+                const tileH = data.tile_h || 32;
+                const key = data.url + '@' + tileW + 'x' + tileH;
+                if (miniSpriteCache[key]) return miniSpriteCache[key];
+                const baseTex = PIXI.BaseTexture.from(data.url);
+                const imgW = data.img_w || 0;
+                const imgH = data.img_h || 0;
+                let textures;
+                if (imgW > 0 && imgH > 0) {
+                    const cols = Math.floor(imgW / tileW);
+                    const rows = Math.floor(imgH / tileH);
+                    if (cols >= 1 && rows >= 1) {
+                        textures = [];
+                        for (let r = 0; r < rows; r++) {
+                            for (let c = 0; c < cols; c++) {
+                                textures.push(new PIXI.Texture(baseTex, new PIXI.Rectangle(
+                                    c * tileW, r * tileH, tileW, tileH
+                                )));
+                            }
+                        }
+                    }
+                }
+                if (!textures || textures.length === 0) {
+                    textures = [new PIXI.Texture(baseTex)];
+                }
+                const entry = { textures, cols: textures.length, rows: 1, len: textures.length };
+                miniSpriteCache[key] = entry;
+                return entry;
+            }
+
             function redrawTiles() {
                 tileGraphics.clear();
                 for (const tile of tiles) {
                     const px = tile.x * tileSize;
                     const py = tile.y * tileSize;
+                    const color = hexToNum(terrainColors[tile.terrain_type] || terrainColors.plain);
+                    tileGraphics.beginFill(color);
+                    tileGraphics.drawRect(px, py, tileSize, tileSize);
+                    tileGraphics.endFill();
                     const spriteKey = 'terrain/' + tile.terrain_type;
-                    if (themeSprites[spriteKey]) {
-                        const sprite = new PIXI.Sprite(loadSprite(themeSprites[spriteKey]));
+                    const sheetKey = 'terrain_' + tile.terrain_type;
+                    const sd = themeSprites[spriteKey];
+                    if (sd) {
+                        if (typeof sd === 'object' && sd.url) {
+                            const mt = getMiniTextures(sd);
+                            if (mt.len > 0) {
+                                const idx = Math.abs(Math.floor(seededRandom(tile.x * 1000 + tile.y) * mt.len) % mt.len);
+                                const sprite = new PIXI.Sprite(mt.textures[idx]);
+                                sprite.x = px;
+                                sprite.y = py;
+                                sprite.width = tileSize;
+                                sprite.height = tileSize;
+                                tileGraphics.addChild(sprite);
+                            }
+                        } else if (typeof sd === 'string') {
+                            const sprite = new PIXI.Sprite(loadSprite(sd));
+                            sprite.x = px;
+                            sprite.y = py;
+                            sprite.width = tileSize;
+                            sprite.height = tileSize;
+                            tileGraphics.addChild(sprite);
+                        }
+                    } else if (sheetReady && sheetSubTextures[sheetKey] && sheetSubTextures[sheetKey].length > 0) {
+                        const textures = sheetSubTextures[sheetKey];
+                        const idx = Math.floor(seededRandom(tile.x * 1000 + tile.y) * textures.length) % Math.max(textures.length, 1);
+                        const sprite = new PIXI.Sprite(textures[Math.abs(idx)]);
                         sprite.x = px;
                         sprite.y = py;
                         sprite.width = tileSize;
                         sprite.height = tileSize;
                         tileGraphics.addChild(sprite);
-                    } else {
-                        const color = hexToNum(terrainColors[tile.terrain_type] || terrainColors.plain);
-                        tileGraphics.beginFill(color);
-                        tileGraphics.drawRect(px, py, tileSize, tileSize);
-                        tileGraphics.endFill();
                     }
                     if (tile.owner_id) {
                         tileGraphics.beginFill(0xffffff, 0.12);
@@ -459,6 +547,60 @@
                 worldContainer.addChildAt(gridGraphics, 1);
             }
 
+            function makeCitySprite(city) {
+                const cx = city.tile_x * tileSize + tileSize / 2;
+                const cy = city.tile_y * tileSize + tileSize / 2;
+                const citySd = themeSprites.city;
+                if (citySd) {
+                    if (typeof citySd === 'object' && citySd.url) {
+                        const mt = getMiniTextures(citySd);
+                        if (mt.len > 0) {
+                            const idx = Math.abs(Math.floor(seededRandom(city.tile_x * 1000 + city.tile_y + 999) * mt.len) % mt.len);
+                            const sprite = new PIXI.Sprite(mt.textures[idx]);
+                            sprite.anchor.set(0.5, 0.5);
+                            sprite.x = cx;
+                            sprite.y = cy;
+                            sprite.width = 24;
+                            sprite.height = 24;
+                            return sprite;
+                        }
+                    } else if (typeof citySd === 'string') {
+                        const sprite = new PIXI.Sprite(loadSprite(citySd));
+                        sprite.anchor.set(0.5, 0.5);
+                        sprite.x = cx;
+                        sprite.y = cy;
+                        sprite.width = 24;
+                        sprite.height = 24;
+                        return sprite;
+                    }
+                }
+                if (sheetReady && sheetSubTextures.city && sheetSubTextures.city.length > 0) {
+                    const textures = sheetSubTextures.city;
+                    const idx = Math.floor(seededRandom(city.tile_x * 1000 + city.tile_y + 999) * textures.length) % Math.max(textures.length, 1);
+                    const sprite = new PIXI.Sprite(textures[Math.abs(idx)]);
+                    sprite.anchor.set(0.5, 0.5);
+                    sprite.x = cx;
+                    sprite.y = cy;
+                    sprite.width = 24;
+                    sprite.height = 24;
+                    return sprite;
+                }
+                return null;
+            }
+
+            function cityFallbackGraphic(cx, cy) {
+                const g = new PIXI.Graphics();
+                const cityFill = hexToNum('{{ $themeConfig["colors"]["city"]["fill"] ?? "#f5a623" }}');
+                const cityGlow = hexToNum('{{ $themeConfig["colors"]["city"]["stroke"] ?? "#ffd700" }}');
+                g.beginFill(cityFill);
+                g.drawCircle(cx, cy, 8);
+                g.endFill();
+                g.beginFill(cityGlow, 0.3);
+                g.drawCircle(cx, cy, 14);
+                g.endFill();
+                return g;
+            }
+
             function redrawCities() {
                 const oldCities = worldContainer.children.filter(c => c._isCityContainer);
                 oldCities.forEach(c => worldContainer.removeChild(c));
@@ -470,25 +612,11 @@
                     const cc = new PIXI.Container();
                     cc._isCityContainer = true;
 
-                    if (themeSprites.city) {
-                        const sprite = new PIXI.Sprite(loadSprite(themeSprites.city));
-                        sprite.anchor.set(0.5, 0.5);
-                        sprite.x = cx;
-                        sprite.y = cy;
-                        sprite.width = 24;
-                        sprite.height = 24;
-                        cc.addChild(sprite);
+                    const citySprite = makeCitySprite(city);
+                    if (citySprite) {
+                        cc.addChild(citySprite);
                     } else {
-                        const cityFill = hexToNum('{{ $themeConfig["colors"]["city"]["fill"] ?? "#f5a623" }}');
-                        const cityGlow = hexToNum('{{ $themeConfig["colors"]["city"]["stroke"] ?? "#ffd700" }}');
-                        const cityGfx = new PIXI.Graphics();
-                        cityGfx.beginFill(cityFill);
-                        cityGfx.drawCircle(cx, cy, 8);
-                        cityGfx.endFill();
-                        cityGfx.beginFill(cityGlow, 0.3);
-                        cityGfx.drawCircle(cx, cy, 14);
-                        cityGfx.endFill();
-                        cc.addChild(cityGfx);
+                        cc.addChild(cityFallbackGraphic(cx, cy));
                     }
 
                     const label = new PIXI.Text(city.name, {

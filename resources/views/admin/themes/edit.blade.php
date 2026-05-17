@@ -90,35 +90,118 @@
 
                         <hr class="border-gray-300 dark:border-gray-600">
 
+                        @php
+                        $spriteFields = ['terrain_plain' => 'Plain', 'terrain_forest' => 'Forest', 'terrain_mountain' => 'Mountain', 'terrain_water' => 'Water', 'terrain_desert' => 'Desert', 'city' => 'City'];
+                        @endphp
                         <div>
                             <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3">{{ __('Sprites') }}</h3>
-                            <p class="text-xs text-gray-500 dark:text-gray-400 mb-3">{{ __('Leave empty to keep existing. Upload PNG, GIF, JPG or WebP. Max 1MB.') }}</p>
-                            <div class="space-y-4">
-                                @php $spriteFields = ['terrain_plain' => 'Plain', 'terrain_forest' => 'Forest', 'terrain_mountain' => 'Mountain', 'terrain_water' => 'Water', 'terrain_desert' => 'Desert', 'city' => 'City']; @endphp
+                            <p class="text-xs text-gray-500 dark:text-gray-400 mb-3">{{ __('Leave empty to keep existing, or upload to replace. Set crop size to slice a sprite sheet into multiple tiles for random variety on the map.') }}</p>
+
+                            <div class="grid grid-cols-2 gap-6">
                                 @foreach($spriteFields as $key => $label)
                                     @php
                                         $configKey = $key === 'city' ? 'sprites/city' : 'sprites/terrain/' . str_replace('terrain_', '', $key);
                                         $current = $c[$configKey] ?? null;
+                                        $currentUrl = is_string($current) ? $current : ($current['url'] ?? null);
+                                        $currentTileW = is_array($current) ? ($current['tile_w'] ?? 32) : 32;
+                                        $currentTileH = is_array($current) ? ($current['tile_h'] ?? 32) : 32;
                                     @endphp
-                                    <div class="flex items-center gap-4">
-                                        <div class="grow">
-                                            <x-input-label for="sprite_{{ $key }}" :value="__($label . ' Sprite')" />
-                                            <input id="sprite_{{ $key }}" name="sprite_{{ $key }}" type="file" accept="image/png,image/gif,image/jpeg,image/webp"
-                                                   class="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100">
-                                        </div>
-                                        @if($current)
-                                            <div class="shrink-0 mt-5">
-                                                @if(preg_match('/\.gif$/i', $current))
-                                                    <img src="{{ $current }}" alt="{{ $label }}" class="w-10 h-10 rounded object-cover border border-gray-300 dark:border-gray-600">
-                                                @else
-                                                    <img src="{{ $current }}" alt="{{ $label }}" class="w-10 h-10 rounded object-cover border border-gray-300 dark:border-gray-600">
-                                                @endif
+                                    <div x-data="spriteCrop({{ $currentTileW }}, {{ $currentTileH }})">
+                                        <div class="flex items-start gap-3">
+                                            <div class="grow">
+                                                <x-input-label for="sprite_{{ $key }}" :value="__($label . ' Sprite')" />
+                                                <input id="sprite_{{ $key }}" name="sprite_{{ $key }}" type="file" accept="image/png,image/gif,image/jpeg,image/webp"
+                                                       @change="loadFile($event)"
+                                                       class="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100">
+                                                <div class="flex gap-3 mt-1.5">
+                                                    <div class="flex items-center gap-1">
+                                                        <label class="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">{{ __('Crop W') }}</label>
+                                                        <input type="number" name="crop_w_{{ $key }}" x-model="cropW" @input="extract()"
+                                                               min="8" max="256" class="w-16 text-xs border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 rounded shadow-sm">
+                                                    </div>
+                                                    <div class="flex items-center gap-1">
+                                                        <label class="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">{{ __('Crop H') }}</label>
+                                                        <input type="number" name="crop_h_{{ $key }}" x-model="cropH" @input="extract()"
+                                                               min="8" max="256" class="w-16 text-xs border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 rounded shadow-sm">
+                                                    </div>
+                                                    <div x-show="img" class="text-xs text-gray-400 self-center">
+                                                        <span x-text="imgWidth + 'x' + imgHeight + 'px'"></span>
+                                                        <span x-show="previews.length > 1" x-text="' → ' + previews.length + ' tiles'" class="text-indigo-500"></span>
+                                                    </div>
+                                                </div>
+                                                <div x-show="previews.length" class="flex flex-wrap gap-1 mt-2 p-2 bg-gray-50 dark:bg-gray-900/50 rounded border border-gray-200 dark:border-gray-700">
+                                                    <template x-for="(dataUrl, i) in previews" :key="i">
+                                                        <img :src="dataUrl" alt=""
+                                                             class="block border border-gray-300 dark:border-gray-600 rounded"
+                                                             :style="'width:' + Math.min(64, cropW) + 'px;height:' + Math.min(64, cropH) + 'px'">
+                                                    </template>
+                                                </div>
                                             </div>
-                                        @endif
+                                            @if($currentUrl)
+                                                <div class="shrink-0">
+                                                    <img src="{{ $currentUrl }}" alt="{{ $label }}"
+                                                         class="w-10 h-10 rounded object-cover border border-gray-300 dark:border-gray-600 mt-6">
+                                                </div>
+                                            @endif
+                                        </div>
                                     </div>
                                 @endforeach
                             </div>
                         </div>
+
+                        @push('scripts')
+                        <script>
+                            function spriteCrop(initialW, initialH) {
+                                return {
+                                    cropW: initialW || 32,
+                                    cropH: initialH || 32,
+                                    previews: [],
+                                    img: null,
+                                    imgWidth: 0,
+                                    imgHeight: 0,
+
+                                    loadFile(e) {
+                                        const file = e.target.files[0];
+                                        if (!file) { this.img = null; this.previews = []; return; }
+                                        const reader = new FileReader();
+                                        reader.onload = (ev) => {
+                                            const img = new Image();
+                                            img.onload = () => {
+                                                this.img = img;
+                                                this.imgWidth = img.width;
+                                                this.imgHeight = img.height;
+                                                this.extract();
+                                            };
+                                            img.src = ev.target.result;
+                                        };
+                                        reader.readAsDataURL(file);
+                                    },
+
+                                    extract() {
+                                        if (!this.img) return;
+                                        const tw = parseInt(this.cropW) || 32;
+                                        const th = parseInt(this.cropH) || 32;
+                                        if (tw < 8 || th < 8) return;
+                                        const cols = Math.floor(this.img.width / tw);
+                                        const rows = Math.floor(this.img.height / th);
+                                        if (cols < 1 || rows < 1) return;
+                                        const canvas = document.createElement('canvas');
+                                        canvas.width = tw;
+                                        canvas.height = th;
+                                        const ctx = canvas.getContext('2d');
+                                        this.previews = [];
+                                        for (let r = 0; r < rows; r++) {
+                                            for (let c = 0; c < cols; c++) {
+                                                ctx.clearRect(0, 0, tw, th);
+                                                ctx.drawImage(this.img, c * tw, r * th, tw, th, 0, 0, tw, th);
+                                                this.previews.push(canvas.toDataURL());
+                                            }
+                                        }
+                                    },
+                                };
+                            }
+                        </script>
+                        @endpush
 
                         <div class="flex items-center gap-4">
                             <x-primary-button>{{ __('Update Theme') }}</x-primary-button>

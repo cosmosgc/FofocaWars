@@ -228,6 +228,34 @@ Themes support sprite images for terrain tiles and city markers. When a sprite i
 - City sprites: `24×24` pixels (centered on the tile)
 - Animated GIFs work — they play on the PixiJS map
 - If no sprite is provided for a terrain type, the solid color from `colors.terrain.*` is used as fallback
+- The solid terrain color is always rendered as a background under sprites, so sprites with transparency blend nicely
+
+### Sprite Crop (Mini-Spritesheets)
+
+Each individual sprite upload supports **crop dimensions**. If the uploaded image is larger than the crop size, it becomes a mini-spritesheet — PixiJS slices it into tiles and picks randomly per tile coordinate (`seededRandom(x*1000+y)`) for visual variety:
+
+1. Upload your sprite image (PNG/GIF/JPG/WebP, max 1MB)
+2. Set the **Crop W** and **Crop H** to the size of each individual tile (e.g., 16×16px)
+3. A preview shows all extracted tiles live in the admin UI
+4. On the map, each tile coordinate gets a deterministic random pick from the extracted tiles
+
+Config stored in theme's `config` per terrain type:
+
+```json
+{
+  "sprites/terrain/plain": {
+    "url": "https://.../terrain_plain.png",
+    "tile_w": 16,
+    "tile_h": 16,
+    "img_w": 64,
+    "img_h": 16
+  }
+}
+```
+
+- If crop dimensions are not set (or match the full image), the sprite is stored as a plain URL string for backward compatibility
+- The solid terrain color is always rendered as a background under sprites
+- The map view handles both old string-format and new object-format via `getMiniTextures()`
 
 ## Unit Images
 

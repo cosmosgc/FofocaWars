@@ -67,5 +67,6 @@
 - Chart.js v4.4.7 loaded from CDN in analytics view.
 - **Admin theme CRUD**: `/admin/themes` — full theme management with color pickers, battle effect dropdown, sprite uploads.
 - **Sprites**: themes support `sprites/terrain/{type}` and `sprites/city` in config. Upload PNG/GIF/JPG/WebP via admin UI → stored in `public/themes/{name}/`. PixiJS map renders sprites when available, falls back to solid colors.
+- **Sprite crop**: each individual sprite upload has Crop W/H inputs. If the image is larger than the crop size, it becomes a mini-spritesheet — PixiJS slices it into tiles and picks randomly per coordinate (`seededRandom(x*1000+y)`). Preview shows extracted tiles live. Config stores as `{url, tile_w, tile_h, img_w, img_h}` or plain URL string (backward compat). Map view handles both formats via `getMiniTextures()`. No more separate spritesheet feature.
 - **Unit images**: `unit_types.image` column stores URL to unit sprite. Displayed as small thumbnails in garrison and training views.
 - **Base rename**: rename form on bases show page at `POST /wars/{war}/bases/{base}/rename`.
