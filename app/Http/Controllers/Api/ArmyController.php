@@ -11,6 +11,7 @@ use App\Models\TrainingQueue;
 use App\Models\Unit;
 use App\Models\UnitType;
 use App\Game\Army\ArmyService;
+use App\Game\Building\BuildingService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
@@ -215,7 +216,12 @@ class ArmyController extends Controller
         $city->decrement('food', $totalFood);
         $city->decrement('metal', $totalMetal);
 
-        $timePerUnit = $unitType->training_time * (float) $war->construction_speed;
+        $cityEffects = BuildingService::getCityBuildingEffects($city);
+        $globalEffects = BuildingService::getAllPlayerBuildingEffects($war->id, $player->id);
+        $trainingSpeedBonus = ($cityEffects['training_speed'] ?? 0) + ($globalEffects['training_speed'] ?? 0);
+        $trainingSpeedMult = max(0.1, 1 - $trainingSpeedBonus / 100);
+
+        $timePerUnit = $unitType->training_time * (float) $war->construction_speed * $trainingSpeedMult;
         $finishesAt = now()->addMinutes(max(1, (int) ceil($timePerUnit * $quantity)));
 
         TrainingQueue::create([

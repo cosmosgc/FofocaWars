@@ -7,6 +7,7 @@ use App\Models\War;
 use App\Models\WarPlayer;
 use App\Models\City;
 use App\Game\Economy\ResourceService;
+use App\Game\Building\BuildingService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
@@ -22,10 +23,22 @@ class ResourceController extends Controller
             ->where('owner_id', $player->id)
             ->get()
             ->each(fn($city) => $service->syncCity($city, $war))
-            ->map(fn($city) => array_merge(
-                $city->only(['id', 'name', 'wood', 'stone', 'food', 'metal', 'population', 'max_wood', 'max_stone', 'max_food', 'max_metal']),
-                ['url' => route('cities.show', [$war, $city])]
-            ));
+            ->map(function ($city) use ($war) {
+                $cityEffects = BuildingService::getCityBuildingEffects($city);
+                $globalEffects = BuildingService::getAllPlayerBuildingEffects($war->id, $city->owner_id);
+                $maxMult = 1 + (($cityEffects['max_resource_mult'] ?? 0) + ($globalEffects['max_resource_mult'] ?? 0)) / 100;
+
+                return array_merge(
+                    $city->only(['id', 'name', 'wood', 'stone', 'food', 'metal', 'population']),
+                    [
+                        'max_wood' => (int) round($city->max_wood * $maxMult),
+                        'max_stone' => (int) round($city->max_stone * $maxMult),
+                        'max_food' => (int) round($city->max_food * $maxMult),
+                        'max_metal' => (int) round($city->max_metal * $maxMult),
+                        'url' => route('cities.show', [$war, $city]),
+                    ]
+                );
+            });
 
         $rates = $service->getProductionRates($war);
 

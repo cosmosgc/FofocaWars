@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Base extends Model
 {
@@ -20,5 +21,10 @@ class Base extends Model
     public function owner(): BelongsTo
     {
         return $this->belongsTo(WarPlayer::class, 'owner_id');
+    }
+
+    public function buildings(): HasMany
+    {
+        return $this->hasMany(BaseBuilding::class);
     }
 }

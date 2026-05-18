@@ -5,10 +5,21 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class City extends Model
 {
     use HasFactory;
+
+    protected static function booted(): void
+    {
+        static::created(function (City $city) {
+            $city->buildings()->create([
+                'type' => 'town_hall',
+                'level' => 1,
+            ]);
+        });
+    }
     protected $fillable = [
         'war_id', 'owner_id', 'name',
         'tile_x', 'tile_y', 'population',
@@ -34,5 +45,10 @@ class City extends Model
     public function owner(): BelongsTo
     {
         return $this->belongsTo(WarPlayer::class, 'owner_id');
+    }
+
+    public function buildings(): HasMany
+    {
+        return $this->hasMany(CityBuilding::class);
     }
 }

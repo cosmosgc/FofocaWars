@@ -70,35 +70,87 @@
                 </div>
             </div>
 
-            <div class="bg-white dark:bg-gray-800 overflow-hidden shadow-sm sm:rounded-lg">
+            <div class="bg-white dark:bg-gray-800 overflow-hidden shadow-sm sm:rounded-lg"
+                 x-data="cityPreview('{{ route('api.wars.cities.buildings', [$war, $city]) }}', '{{ $city->name }}', {{ $city->tile_x }}, {{ $city->tile_y }})"
+                 x-init="init()">
                 <div class="p-6">
-                    <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">{{ __('Buildings') }}</h3>
-                    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                        @php
-                            $buildings = [
-                                ['name' => __('Town Hall'), 'icon' => '🏛️', 'level' => 1, 'desc' => __('City management')],
-                                ['name' => __('Lumber Mill'), 'icon' => '🪵', 'level' => 0, 'desc' => __('Wood production +5')],
-                                ['name' => __('Quarry'), 'icon' => '🪨', 'level' => 0, 'desc' => __('Stone production +4')],
-                                ['name' => __('Farm'), 'icon' => '🌾', 'level' => 0, 'desc' => __('Food production +8')],
-                                ['name' => __('Smelter'), 'icon' => '⚙️', 'level' => 0, 'desc' => __('Metal production +3')],
-                                ['name' => __('Barracks'), 'icon' => '⚔️', 'level' => 0, 'desc' => __('Train units')],
-                                ['name' => __('Wall'), 'icon' => '🧱', 'level' => 0, 'desc' => __('City defense')],
-                                ['name' => __('Market'), 'icon' => '🏪', 'level' => 0, 'desc' => __('Resource trading')],
-                            ];
-                        @endphp
-                        @foreach($buildings as $building)
-                            <div class="border dark:border-gray-700 rounded-lg p-3 text-center {{ $building['level'] > 0 ? '' : 'opacity-50' }}">
-                                <div class="text-2xl mb-1">{{ $building['icon'] }}</div>
-                                <div class="text-sm font-medium text-gray-900 dark:text-gray-100">{{ $building['name'] }}</div>
-                                <div class="text-xs text-gray-500 dark:text-gray-400">{{ $building['desc'] }}</div>
-                                @if($building['level'] > 0)
-                                    <div class="text-xs text-blue-500 mt-1">{{ __('Lv.') }}{{ $building['level'] }}</div>
-                                @else
-                                    <div class="text-xs text-yellow-500 mt-1">{{ __('Locked') }}</div>
-                                @endif
-                            </div>
-                        @endforeach
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">{{ __('City Preview') }}</h3>
                     </div>
+
+                    <template x-if="loading">
+                        <p class="text-sm text-gray-400">{{ __('Loading...') }}</p>
+                    </template>
+
+                    <div class="relative w-full aspect-video bg-gray-900 rounded-lg overflow-hidden border border-gray-700"
+                         x-show="!loading">
+                        <div class="absolute inset-0 flex items-center justify-center" x-html="svg"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white dark:bg-gray-800 overflow-hidden shadow-sm sm:rounded-lg"
+                 x-data="cityBuildings('{{ route('api.wars.cities.buildings', [$war, $city]) }}', '{{ route('api.wars.cities.build', [$war, $city]) }}')"
+                 x-init="init()">
+                <div class="p-6">
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">{{ __('Buildings') }}</h3>
+                        <span class="text-sm text-gray-500 dark:text-gray-400" x-text="'{{ $war->construction_speed }}x speed'"></span>
+                    </div>
+
+                    <template x-if="loading">
+                        <p class="text-sm text-gray-400">{{ __('Loading...') }}</p>
+                    </template>
+
+                    <template x-if="!loading && buildings.length === 0">
+                        <p class="text-sm text-gray-400">{{ __('No buildings available.') }}</p>
+                    </template>
+
+                    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4" x-show="!loading">
+                        <template x-for="b in buildings" :key="b.type">
+                            <div class="border dark:border-gray-700 rounded-lg p-3 text-center relative"
+                                 :class="b.level > 0 ? '' : 'opacity-60'">
+                                <div class="text-2xl mb-1" x-text="b.icon"></div>
+                                <div class="text-sm font-medium text-gray-900 dark:text-gray-100" x-text="b.name"></div>
+                                <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5" x-text="b.description"></div>
+                                <div class="mt-2">
+                                    <span class="inline-block px-2 py-0.5 rounded-full text-xs font-bold"
+                                          :class="b.level === 0 ? 'bg-gray-600 text-gray-300' : 'bg-blue-600 text-white'">
+                                        <span x-text="b.level > 0 ? 'Lv ' + b.level + '/' + b.max_level : '{{ __('Not Built') }}'"></span>
+                                    </span>
+                                </div>
+
+                                <template x-if="b.is_under_construction">
+                                    <div class="mt-2">
+                                        <div class="text-xs text-yellow-500 font-medium">{{ __('Under Construction') }}</div>
+                                        <div class="text-xs text-gray-400" x-text="'Ready: ' + new Date(b.finishes_at).toLocaleString()"></div>
+                                    </div>
+                                </template>
+
+                                <template x-if="b.can_upgrade">
+                                    <div class="mt-2">
+                                        <button @click="doBuild(b.type)"
+                                                :disabled="busy === b.type"
+                                                class="w-full px-2 py-1 text-xs font-medium text-white bg-blue-600 rounded hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                x-text="busy === b.type ? '{{ __('...') }}' : '{{ __('Upgrade') }}'">
+                                        </button>
+                                        <div class="text-xs text-gray-400 mt-0.5">
+                                            <template x-for="(val, key) in b.next_costs" :key="key">
+                                                <span x-show="val > 0" x-text="key + ':' + val + ' '"></span>
+                                            </template>
+                                            <span x-text="b.build_time + 'min'"></span>
+                                        </div>
+                                    </div>
+                                </template>
+
+                                <template x-if="!b.can_upgrade && !b.is_under_construction && b.level > 0">
+                                    <div class="mt-2 text-xs text-green-500 font-medium">{{ __('Max Level') }}</div>
+                                </template>
+                            </div>
+                        </template>
+                    </div>
+
+                    <div x-show="message" x-text="message" class="mt-3 text-sm" :class="error ? 'text-red-600' : 'text-green-600'"></div>
                 </div>
             </div>
 
@@ -210,6 +262,123 @@
                         const data = await res.json();
                         if (!res.ok) { this.error = true; this.message = data.error || 'Error'; }
                         else { this.message = data.message; this.fetchQueue(); }
+                    } catch(e) { this.error = true; this.message = 'Request failed.'; }
+                    this.busy = null;
+                },
+            };
+        }
+
+        function cityPreview(listUrl, cityName, tileX, tileY) {
+            return {
+                buildings: [], loading: true, svg: '',
+                async init() { await this.fetch(); setInterval(() => this.fetch(), 15000); },
+                async fetch() {
+                    try {
+                        const r = await fetch(listUrl);
+                        const d = await r.json();
+                        this.buildings = d.buildings;
+                        this.renderSvg();
+                        this.loading = false;
+                    } catch(e) {}
+                },
+                renderSvg() {
+                    const defs = {
+                        town_hall: { color: '#8B4513', roofColor: '#A0522D', w: 28 },
+                        lumber_mill: { color: '#6B8E23', roofColor: '#556B2F', w: 16 },
+                        quarry: { color: '#808080', roofColor: '#696969', w: 16 },
+                        farm: { color: '#228B22', roofColor: '#006400', w: 20 },
+                        smelter: { color: '#B22222', roofColor: '#8B0000', w: 14 },
+                        barracks: { color: '#4682B4', roofColor: '#36648B', w: 18 },
+                        wall: { color: '#A0522D', roofColor: '#8B4513', w: 22 },
+                        market: { color: '#DAA520', roofColor: '#B8860B', w: 16 },
+                    };
+
+                    const positions = [
+                        { x: 100, y: 140, s: 1.2 },
+                        { x: 180, y: 125, s: 1.0 },
+                        { x: 260, y: 130, s: 1.0 },
+                        { x: 140, y: 160, s: 0.9 },
+                        { x: 220, y: 155, s: 0.9 },
+                        { x: 300, y: 145, s: 0.8 },
+                        { x: 330, y: 160, s: 0.8 },
+                        { x: 70,  y: 155, s: 0.8 },
+                    ];
+
+                    const withLevel = this.buildings.filter(b => b.level > 0);
+                    let buildingsHtml = '';
+
+                    if (withLevel.length === 0) {
+                        buildingsHtml += `<rect x="185" y="150" width="30" height="20" fill="#5a4a3a" rx="2"/>
+                                          <polygon points="180,150 200,140 220,150" fill="#7a6a5a"/>`;
+                    } else {
+                        withLevel.forEach((b, i) => {
+                            const d = defs[b.type] || { color: '#555', roofColor: '#444', w: 14 };
+                            const p = positions[i] || positions[0];
+                            const w = d.w + (b.level * 2);
+                            const h = 18 + (b.level * 4);
+                            const sc = (p.s + (b.level * 0.05)).toFixed(2);
+
+                            buildingsHtml += `<g transform="translate(${p.x},${p.y}) scale(${sc})">`;
+                            buildingsHtml += `<rect x="${-w/2}" y="${-h}" width="${w}" height="${h}" fill="${d.color}" rx="2" stroke="#ffd700" stroke-width="1.5" opacity="0.95"/>`;
+                            buildingsHtml += `<polygon points="${-w/2-4},${-h} 0,${-h-10} ${w/2+4},${-h}" fill="${d.roofColor}"/>`;
+                            buildingsHtml += `<text x="0" y="${-h/2 + 3}" text-anchor="middle" fill="white" font-size="8" font-weight="bold">Lv${b.level}</text>`;
+                            buildingsHtml += `<rect x="-4" y="-8" width="8" height="8" fill="#4a3728" rx="1"/>`;
+                            buildingsHtml += `</g>`;
+                        });
+                    }
+
+                    this.svg = `<svg viewBox="0 0 400 250" class="w-full h-full">
+                        <defs>
+                            <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stop-color="#1a1a2e"/>
+                                <stop offset="100%" stop-color="#16213e"/>
+                            </linearGradient>
+                            <linearGradient id="ground" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stop-color="#3a7d1e"/>
+                                <stop offset="100%" stop-color="#2d5016"/>
+                            </linearGradient>
+                        </defs>
+                        <rect x="0" y="0" width="400" height="180" fill="url(#sky)"/>
+                        <rect x="0" y="180" width="400" height="70" fill="url(#ground)"/>
+                        <circle cx="40" cy="30" r="1" fill="white" opacity="0.7"/>
+                        <circle cx="120" cy="15" r="1" fill="white" opacity="0.6"/>
+                        <circle cx="200" cy="25" r="1.5" fill="white" opacity="0.8"/>
+                        <circle cx="300" cy="10" r="1" fill="white" opacity="0.5"/>
+                        <circle cx="360" cy="35" r="1" fill="white" opacity="0.7"/>
+                        <circle cx="80" cy="50" r="1" fill="white" opacity="0.4"/>
+                        <circle cx="250" cy="40" r="1" fill="white" opacity="0.6"/>
+                        <circle cx="340" cy="55" r="1" fill="white" opacity="0.5"/>
+                        ${buildingsHtml}
+                        <text x="200" y="225" text-anchor="middle" fill="#e0e0e0" font-size="14" font-weight="bold">${cityName}</text>
+                        <text x="200" y="242" text-anchor="middle" fill="#a0a0a0" font-size="10">${tileX}, ${tileY}</text>
+                    </svg>`;
+                },
+            };
+        }
+
+        function cityBuildings(listUrl, buildUrl) {
+            return {
+                buildings: [], loading: true, message: '', error: false, busy: null,
+                async init() { await this.fetch(); setInterval(() => this.fetch(), 15000); },
+                async fetch() {
+                    try {
+                        const r = await fetch(listUrl);
+                        const d = await r.json();
+                        this.buildings = d.buildings;
+                        this.loading = false;
+                    } catch(e) {}
+                },
+                async doBuild(type) {
+                    this.busy = type; this.message = ''; this.error = false;
+                    try {
+                        const res = await fetch(buildUrl, {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json', 'X-CSRF-TOKEN': '{{ csrf_token() }}'},
+                            body: JSON.stringify({type: type})
+                        });
+                        const data = await res.json();
+                        if (!res.ok) { this.error = true; this.message = data.error || 'Error'; }
+                        else { this.message = data.message; this.fetch(); }
                     } catch(e) { this.error = true; this.message = 'Request failed.'; }
                     this.busy = null;
                 },

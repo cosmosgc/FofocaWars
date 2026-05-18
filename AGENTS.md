@@ -26,47 +26,40 @@
 - **PixiJS v7.3.2**: loaded from CDN (`pixi.min.js`), all map rendering is inline JS in `resources/views/wars/map.blade.php`.
 - **Alpine.js**: used for resource panel polling (`x-data="resources()"`) and profile avatar preview.
 
-## Theme Engine (Phase 5)
-- **`themes` table**: `name` (string, FK target from `wars.theme`), `label`, `description`, `is_default`, `config` (JSON)
-- **`ThemeService`** (`app/Game/Theme/ThemeService.php`): resolves theme config from DB, provides `terrainColors()`, `legendColors()`, `cssVariables()` per war
-- **4 seeded themes**: medieval (default), desert, winter, neon — each with `config.colors.terrain`, `config.battle_effect`, `config.css`
-- **Map rendering**: terrain colors, city colors, base colors, and battle effect type are all driven by `$themeConfig` / `$themeColors` passed from `WarController.map()`
-- **Battle effects**: PixiJS particle explosion animation on the map at battle tile location; effect type (`explosion` / `sandstorm` / `snow` / `cyber`) comes from `themeConfig.battle_effect`
-- **Admin**: theme dropdown in war create/edit loads from `Theme::all()`, validation uses `Theme::pluck('name')`
-- **War.themeData()**: `BelongsTo` relationship to `Theme` via `theme` → `name`
-- **Add new theme**: create row in `themes` table with full config JSON; no code changes needed. See `THEMES.md` for complete reference.
+## Theme Engine
+- **`themes` table**: `name` (string, FK target from `wars.theme`), `label`, `description`, `is_default`, `config` (JSON).
+- **`ThemeService`** (`app/Game/Theme/ThemeService.php`): resolves per-war theme, exposes `terrainColors()`, `legendColors()`, `cssVariables()`.
+- **Config keys**: `colors.terrain.{plain,forest,mountain,water,desert}`, `colors.city.{fill,stroke}`, `colors.bases.{resource,military,trade,alliance}`, `css.*`, `battle_effect`.
+- **Battle effects** (`explosion`/`sandstorm`/`snow`/`cyber`): PixiJS particle animation at battle tile location, driven by `themeConfig.battle_effect`.
+- **Admin**: theme dropdown in war create/edit uses `Theme::pluck('name')` for validation.
+- **Sprite crop (mini-spritesheets)**: Each of 6 sprite types (5 terrain + city) has its own file + Crop W/H inputs. If image is larger than crop, it becomes mini-spritesheet — PixiJS slices into tiles, picks randomly per coordinate (`seededRandom(x*1000+y)`). Config stored as `{url, tile_w, tile_h, img_w, img_h}` (object) or plain URL string (backward compat). Map handles both via `getMiniTextures()`.
+- **Full reference**: see `THEMES.md` for creating custom themes, sprites, and unit images.
 
 ## Key conventions
 - War lifecycle: `setup` → `running` → `ended`. Players can join even while `running`.
-- Resources per-city, capped at `max_*`. `syncCity()` catches up elapsed production on every read (lazy, no cron needed for basic operation).
+- Resources per-city, capped at `max_*`. `syncCity()` catches up elapsed production on every read (lazy, no cron needed).
 - Training and army arrivals auto-complete on API read (checks `finishes_at <= now()` / `arrival_at <= now()`).
-- `sendArmy($origin, $target, $units, $war, $mission)` — 5th param is `'attack'` (default) or `'reinforce'`.
-- Reinforce armies become separate `Army` records (`status=stationed`, `mission=reinforce`), not merged into city units.
+- Armies: `sendArmy($origin, $target, $units, $war, $mission)` — 5th param `'attack'` (default) or `'reinforce'`. Reinforce armies are separate `Army` records (`status=stationed`, `mission=reinforce`).
 - Unit types are global (seeded once in `UnitTypeSeeder`), not per-war.
 - Building cards in city view are hardcoded Blade placeholders (no DB model).
 - Battle loot: attacker takes half of defender's city resources (capped by winner's origin city max caps).
-- Founding cities: free if player has 0 cities; otherwise costs resource proportional to `construction_speed`. Can found on any unowned non-water tile via click on PixiJS map (`POST /api/wars/{war}/tiles/found`).
-
-## Admin
-- `is_admin` on `users` table. Promote: `User::where('email','...')->update(['is_admin'=>true])`
-- Admin panel at `/admin/wars` — CRUD wars, change status, edit settings.
+- Founding cities: free if player has 0 cities; resource cost proportional to `construction_speed` for subsequent.
+- Admin: `is_admin` on `users` table. Panel at `/admin/wars` (CRUD wars, change status, edit settings) and `/admin/themes` (full theme CRUD with color pickers, battle effect dropdown, sprite uploads).
 
 ## Translations
 - Default: `pt_BR`. Fallback: `en`.
 - All keys in `lang/pt_BR.json` (English keys, Portuguese values). No PHP lang files — JSON only.
 - Views use `__('English String')`; JS uses `__i18n()` (identity — new keys need Blade-rendered strings).
-- CRITICAL: `__('Messages')` matched `messages.php` filename on Windows case-insensitively and returned the whole array. Solution: delete all `lang/*.php` files, only use JSON.
+- CRITICAL: Never create `lang/*.php` files — `__('Messages')` matched `messages.php` on Windows case-insensitively and returned the whole array.
 
 ## Gotchas
-- Avatar files stored directly in `public/avatars/` (not Storage disk). Accessor: `url('avatars/' . $filename)`.
-- No queue workers in dev (sync driver). In prod, `queue:listen` handles deferred ticks.
-- Scheduler (`routes/console.php`): `game:tick-resources`, `game:tick-armies`, `game:tick-training` every minute; `game:tick-analytics` every 10 min. Requires cron on shared hosting.
-- Map tile coordinates in API responses use `x`, `y` columns on `tiles` table, not lat/lng.
-- **Theme docs**: see `THEMES.md` at project root for full reference on creating custom themes.
-- Analytics (`game:tick-analytics`) snapshots resource/army/territory history every 10 min via scheduler. Manual: `php artisan game:tick-analytics`.
+- Avatar files stored in `public/avatars/` (not Storage disk). Accessor: `url('avatars/' . $filename)`.
+- No queue workers in dev (sync driver). Scheduler in `routes/console.php`: resources/armies/training every minute, analytics every 10 min.
+- Map tile coordinates use `x`, `y` columns (not lat/lng).
+- **miniSpriteCache TDZ**: `const miniSpriteCache = {}` must be declared before the first `redrawTiles()` call at initial render — not after `function getMiniTextures` — or `ReferenceError` occurs.
+- **Crop-only update path resolution**: In `ThemeController::handleSpriteUploads()`, when only crop dimensions change (no new file), construct local path as `$publicDir . '/' . basename(parse_url($url, PHP_URL_PATH))`. Do NOT use `public_path(ltrim(...))` — the URL has a subdirectory prefix and path doubles.
+- **getMiniTextures fallback**: Falls back to full uncropped image if `img_w`/`img_h` are missing or grid math produces 0 tiles/rows — prevents invisible tiles but shows wrong image.
+- **Old spritesheet config**: `spritesheet_*` config keys are auto-cleaned on theme save. If theme data seems stale, re-save via admin UI.
 - Chart.js v4.4.7 loaded from CDN in analytics view.
-- **Admin theme CRUD**: `/admin/themes` — full theme management with color pickers, battle effect dropdown, sprite uploads.
-- **Sprites**: themes support `sprites/terrain/{type}` and `sprites/city` in config. Upload PNG/GIF/JPG/WebP via admin UI → stored in `public/themes/{name}/`. PixiJS map renders sprites when available, falls back to solid colors.
-- **Sprite crop**: each individual sprite upload has Crop W/H inputs. If the image is larger than the crop size, it becomes a mini-spritesheet — PixiJS slices it into tiles and picks randomly per coordinate (`seededRandom(x*1000+y)`). Preview shows extracted tiles live. Config stores as `{url, tile_w, tile_h, img_w, img_h}` or plain URL string (backward compat). Map view handles both formats via `getMiniTextures()`. No more separate spritesheet feature.
-- **Unit images**: `unit_types.image` column stores URL to unit sprite. Displayed as small thumbnails in garrison and training views.
-- **Base rename**: rename form on bases show page at `POST /wars/{war}/bases/{base}/rename`.
+- Unit images: `unit_types.image` column, displayed as 16×16 thumbnails in garrison/training views.
+- Base rename: `POST /wars/{war}/bases/{base}/rename` form on bases show page.

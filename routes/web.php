@@ -5,6 +5,7 @@ use App\Http\Controllers\WarController;
 use App\Http\Controllers\CityController;
 use App\Http\Controllers\ArmyController;
 use App\Http\Controllers\Api\MapController;
+use App\Http\Controllers\Api\ConstructionController;
 use App\Http\Controllers\Api\ResourceController;
 use Illuminate\Support\Facades\Route;
 
@@ -60,6 +61,10 @@ Route::middleware('auth')->group(function () {
     Route::post('/api/wars/{war}/tiles/found', [MapController::class, 'foundOnTile'])->name('api.wars.tiles.found');
     Route::post('/api/wars/{war}/bases/create', [MapController::class, 'createBase'])->name('api.wars.bases.create');
     Route::get('/api/wars/{war}/resources', [ResourceController::class, 'index'])->name('api.wars.resources');
+    Route::get('/api/wars/{war}/cities/{city}/buildings', [ConstructionController::class, 'cityBuildings'])->name('api.wars.cities.buildings');
+    Route::post('/api/wars/{war}/cities/{city}/build', [ConstructionController::class, 'constructCity'])->name('api.wars.cities.build');
+    Route::get('/api/wars/{war}/bases/{base}/buildings', [ConstructionController::class, 'baseBuildings'])->name('api.wars.bases.buildings');
+    Route::post('/api/wars/{war}/bases/{base}/build', [ConstructionController::class, 'constructBase'])->name('api.wars.bases.build');
     Route::get('/api/wars/{war}/armies/movements', [\App\Http\Controllers\Api\ArmyController::class, 'movements'])->name('api.wars.armies.movements');
     Route::get('/api/wars/{war}/armies/map-movements', [\App\Http\Controllers\Api\ArmyController::class, 'mapMovements'])->name('api.wars.armies.map-movements');
     Route::get('/api/wars/{war}/unit-types', [\App\Http\Controllers\Api\ArmyController::class, 'unitTypes'])->name('api.wars.unit-types');

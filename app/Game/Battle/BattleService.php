@@ -8,6 +8,7 @@ use App\Models\City;
 use App\Models\Unit;
 use App\Models\BattleReport;
 use App\Models\UnitType;
+use App\Game\Building\BuildingService;
 use Illuminate\Support\Facades\DB;
 
 class BattleService
@@ -70,8 +71,13 @@ class BattleService
 
     private function calculateDefensePower(City $city): float
     {
-        $power = 0;
-        $units = Unit::where('city_id', $city->id)
+        $effects = BuildingService::getCityBuildingEffects($city);
+        $globalEffects = BuildingService::getAllPlayerBuildingEffects($city->war_id, $city->owner_id);
+        $defenseBonus = $effects['defense_bonus'] ?? 0;
+        $defenseMult = 1 + (($globalEffects['defense_mult'] ?? 0)) / 100;
+
+        $power = $defenseBonus;
+        $units = Unit::where('city_id', $city->id) 
             ->where('quantity', '>', 0)
             ->with('unitType')
             ->get();
@@ -92,7 +98,7 @@ class BattleService
             }
         }
 
-        return max($power, 5);
+        return max($power * $defenseMult, 5);
     }
 
     private function calculateCasualties(Army $army, float $enemyRoll, bool $won): array
