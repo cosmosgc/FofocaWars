@@ -71,20 +71,26 @@
             </div>
 
             <div class="bg-white dark:bg-gray-800 overflow-hidden shadow-sm sm:rounded-lg"
-                 x-data="cityPreview('{{ route('api.wars.cities.buildings', [$war, $city]) }}', '{{ $city->name }}', {{ $city->tile_x }}, {{ $city->tile_y }})"
+                 x-data="cityPreviewPixi('{{ route('api.wars.cities.buildings', [$war, $city]) }}', '{{ route('api.wars.cities.buildings.save-positions', [$war, $city]) }}', '{{ $city->name }}')"
                  x-init="init()">
                 <div class="p-6">
                     <div class="flex items-center justify-between mb-4">
                         <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">{{ __('City Preview') }}</h3>
+                        <button x-show="dirty" @click="savePositions()" :disabled="saving"
+                                class="px-3 py-1 text-xs font-medium text-white bg-green-600 rounded hover:bg-green-500 disabled:opacity-50">
+                            <span x-text="saving ? '{{ __('Saving...') }}' : '{{ __('Save Layout') }}'"></span>
+                        </button>
                     </div>
 
                     <template x-if="loading">
                         <p class="text-sm text-gray-400">{{ __('Loading...') }}</p>
                     </template>
 
-                    <div class="relative w-full aspect-video bg-gray-900 rounded-lg overflow-hidden border border-gray-700"
+                    <div class="relative w-full aspect-video bg-gray-900 rounded-lg overflow-hidden border border-gray-700 pixi-preview"
                          x-show="!loading">
-                        <div class="absolute inset-0 flex items-center justify-center" x-html="svg"></div>
+                        <div x-show="dirty" class="absolute top-2 left-2 bg-yellow-500 text-black text-xs px-2 py-0.5 rounded font-medium z-10 pointer-events-none">
+                            {{ __('Unsaved') }}
+                        </div>
                     </div>
                 </div>
             </div>
@@ -220,6 +226,7 @@
     </div>
 
     @push('scripts')
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/7.3.2/pixi.min.js"></script>
     <script>
         function renameCity(url, originalName) {
             return {
@@ -268,90 +275,381 @@
             };
         }
 
-        function cityPreview(listUrl, cityName, tileX, tileY) {
+        function cityPreviewPixi(listUrl, saveUrl, cityName) {
             return {
-                buildings: [], loading: true, svg: '',
-                async init() { await this.fetch(); setInterval(() => this.fetch(), 15000); },
+                buildings: [], loading: true, app: null, npcs: [], soldiers: [],
+                animId: null, destroyed: false, dirty: false, saving: false,
+                builtSprites: [], wallGfx: null, dragTarget: null, dragOffX: 0, dragOffY: 0,
+                wallLevel: 0, wallRadius: 100, cx: 0, cy: 0,
+
+                async init() {
+                    await this.fetch();
+                    this.$nextTick(() => this.initPixi());
+                },
+
+                destroy() {
+                    this.destroyed = true;
+                    if (this.animId) cancelAnimationFrame(this.animId);
+                    if (this.app && !this.app.destroyed) {
+                        this.app.destroy(true, { children: true, texture: true });
+                    }
+                },
+
                 async fetch() {
                     try {
                         const r = await fetch(listUrl);
                         const d = await r.json();
                         this.buildings = d.buildings;
-                        this.renderSvg();
                         this.loading = false;
                     } catch(e) {}
                 },
-                renderSvg() {
-                    const defs = {
-                        town_hall: { color: '#8B4513', roofColor: '#A0522D', w: 28 },
-                        lumber_mill: { color: '#6B8E23', roofColor: '#556B2F', w: 16 },
-                        quarry: { color: '#808080', roofColor: '#696969', w: 16 },
-                        farm: { color: '#228B22', roofColor: '#006400', w: 20 },
-                        smelter: { color: '#B22222', roofColor: '#8B0000', w: 14 },
-                        barracks: { color: '#4682B4', roofColor: '#36648B', w: 18 },
-                        wall: { color: '#A0522D', roofColor: '#8B4513', w: 22 },
-                        market: { color: '#DAA520', roofColor: '#B8860B', w: 16 },
-                    };
 
-                    const positions = [
-                        { x: 100, y: 140, s: 1.2 },
-                        { x: 180, y: 125, s: 1.0 },
-                        { x: 260, y: 130, s: 1.0 },
-                        { x: 140, y: 160, s: 0.9 },
-                        { x: 220, y: 155, s: 0.9 },
-                        { x: 300, y: 145, s: 0.8 },
-                        { x: 330, y: 160, s: 0.8 },
-                        { x: 70,  y: 155, s: 0.8 },
+                initPixi() {
+                    const el = this.$el.querySelector('.pixi-preview');
+                    if (!el || typeof PIXI === 'undefined' || el.clientWidth === 0) return;
+
+                    const w = el.clientWidth;
+                    const h = el.clientHeight;
+
+                    this.app = new PIXI.Application({
+                        width: w, height: h,
+                        backgroundColor: 0x2d5a1e,
+                        antialias: true,
+                        resolution: window.devicePixelRatio || 1,
+                        autoDensity: true,
+                    });
+
+                    el.appendChild(this.app.view);
+                    this.drawScene();
+                },
+
+                drawScene() {
+                    const app = this.app;
+                    const W = app.screen.width;
+                    const H = app.screen.height;
+                    this.cx = W / 2;
+                    this.cy = H / 2 + 10;
+                    const cx = this.cx, cy = this.cy;
+                    const tileSize = Math.max(16, Math.floor(W / 20));
+
+                    // --- Grid ---
+                    const grid = new PIXI.Graphics();
+                    for (let x = 0; x < W; x += tileSize) {
+                        for (let y = 0; y < H; y += tileSize) {
+                            const shade = ((x / tileSize + y / tileSize) % 2 === 0) ? 0x3a7d1e : 0x2d6b14;
+                            grid.beginFill(shade);
+                            grid.drawRect(x, y, tileSize, tileSize);
+                            grid.endFill();
+                        }
+                    }
+                    app.stage.addChild(grid);
+
+                    const built = this.buildings.filter(b => b.level > 0);
+
+                    // --- Wall circle ---
+                    const wallB = built.find(b => b.type === 'wall');
+                    this.wallLevel = wallB ? wallB.level : 0;
+                    this.wallRadius = 100 + built.length * 4;
+                    this.wallGfx = new PIXI.Graphics();
+                    this.drawWall();
+                    app.stage.addChild(this.wallGfx);
+
+                    // --- Forest patches ---
+                    const drawForest = (fx, fy) => {
+                        const f = new PIXI.Graphics();
+                        f.beginFill(0x1a5c1a, 0.8); f.drawCircle(fx, fy, 26); f.endFill();
+                        f.beginFill(0x145014, 0.6); f.drawCircle(fx + 16, fy - 8, 18); f.endFill();
+                        f.beginFill(0x1a6a1a, 0.5); f.drawCircle(fx - 10, fy + 12, 14); f.endFill();
+                        app.stage.addChild(f);
+                    };
+                    drawForest(cx - this.wallRadius - 30, cy - 10);
+                    drawForest(cx + this.wallRadius + 30, cy);
+
+                    // --- Rocky patches for quarry ---
+                    const drawRocks = (rx, ry) => {
+                        const r = new PIXI.Graphics();
+                        r.beginFill(0x5a5a5a, 0.7); r.drawCircle(rx, ry, 12); r.endFill();
+                        r.beginFill(0x4a4a4a, 0.5); r.drawCircle(rx + 10, ry + 5, 8); r.endFill();
+                        app.stage.addChild(r);
+                    };
+                    drawRocks(cx - this.wallRadius - 20, cy + 15);
+                    drawRocks(cx + this.wallRadius + 25, cy - 15);
+
+                    // --- Field patches for farm ---
+                    const drawField = (fx, fy) => {
+                        const f = new PIXI.Graphics();
+                        f.beginFill(0x8B8B00, 0.6); f.drawRect(fx - 12, fy - 8, 24, 16); f.endFill();
+                        f.lineStyle(1, 0x6B6B00, 0.4);
+                        for (let i = -8; i <= 8; i += 8) { f.moveTo(fx + i, fy - 8); f.lineTo(fx + i, fy + 8); }
+                        app.stage.addChild(f);
+                    };
+                    drawField(cx - this.wallRadius - 25, cy - 20);
+                    drawField(cx + this.wallRadius + 20, cy + 15);
+
+                    // --- Building definitions ---
+                    const defs = [
+                        { type: 'town_hall',   color: 0x8B4513, label: 'Town Hall' },
+                        { type: 'lumber_mill', color: 0x6B8E23, label: 'Lumber Mill' },
+                        { type: 'farm',        color: 0x228B22, label: 'Farm' },
+                        { type: 'quarry',      color: 0x808080, label: 'Quarry' },
+                        { type: 'smelter',     color: 0xB22222, label: 'Smelter' },
+                        { type: 'market',      color: 0xDAA520, label: 'Market' },
+                        { type: 'barracks',    color: 0x4682B4, label: 'Barracks' },
                     ];
 
-                    const withLevel = this.buildings.filter(b => b.level > 0);
-                    let buildingsHtml = '';
+                    const bSprites = [];
 
-                    if (withLevel.length === 0) {
-                        buildingsHtml += `<rect x="185" y="150" width="30" height="20" fill="#5a4a3a" rx="2"/>
-                                          <polygon points="180,150 200,140 220,150" fill="#7a6a5a"/>`;
-                    } else {
-                        withLevel.forEach((b, i) => {
-                            const d = defs[b.type] || { color: '#555', roofColor: '#444', w: 14 };
-                            const p = positions[i] || positions[0];
-                            const w = d.w + (b.level * 2);
-                            const h = 18 + (b.level * 4);
-                            const sc = (p.s + (b.level * 0.05)).toFixed(2);
+                    built.forEach(b => {
+                        const d = defs.find(x => x.type === b.type);
+                        if (!d) return;
 
-                            buildingsHtml += `<g transform="translate(${p.x},${p.y}) scale(${sc})">`;
-                            buildingsHtml += `<rect x="${-w/2}" y="${-h}" width="${w}" height="${h}" fill="${d.color}" rx="2" stroke="#ffd700" stroke-width="1.5" opacity="0.95"/>`;
-                            buildingsHtml += `<polygon points="${-w/2-4},${-h} 0,${-h-10} ${w/2+4},${-h}" fill="${d.roofColor}"/>`;
-                            buildingsHtml += `<text x="0" y="${-h/2 + 3}" text-anchor="middle" fill="white" font-size="8" font-weight="bold">Lv${b.level}</text>`;
-                            buildingsHtml += `<rect x="-4" y="-8" width="8" height="8" fill="#4a3728" rx="1"/>`;
-                            buildingsHtml += `</g>`;
+                        const size = 10 + b.level * 2;
+
+                        let bx = b.pos_x != null ? b.pos_x : 0;
+                        let by = b.pos_y != null ? b.pos_y : 0;
+                        if (b.pos_x == null) {
+                            const idx = defs.indexOf(d);
+                            const angle = (idx / defs.length) * Math.PI * 2 - Math.PI / 2;
+                            const dist = 35 + (idx % 5) * 10;
+                            bx = cx + Math.cos(angle) * dist;
+                            by = cy + Math.sin(angle) * dist;
+                        }
+
+                        const container = new PIXI.Container();
+                        container.x = bx;
+                        container.y = by;
+
+                        const gfx = new PIXI.Graphics();
+                        gfx.beginFill(d.color, 0.9);
+                        gfx.drawRoundedRect(-size / 2, -size / 2, size, size, 2);
+                        gfx.endFill();
+                        gfx.hitArea = new PIXI.Rectangle(-size / 2 - 4, -size / 2 - 4, size + 8, size + 8);
+                        container.addChild(gfx);
+
+                        const lt = new PIXI.Text(d.label, { fontSize: 9, fill: '#eee', fontFamily: 'monospace', align: 'center' });
+                        lt.anchor.set(0.5, 0); lt.y = size / 2 + 2;
+                        container.addChild(lt);
+
+                        const lv = new PIXI.Text('Lv' + b.level, { fontSize: 8, fill: '#ffd700', fontFamily: 'monospace', align: 'center' });
+                        lv.anchor.set(0.5, 1); lv.y = -size / 2 - 2;
+                        container.addChild(lv);
+
+                        // --- Drag setup ---
+                        container.eventMode = 'static';
+                        container.cursor = 'move';
+                        const self = this;
+                        container.on('pointerdown', (e) => {
+                            self.dragTarget = container;
+                            self.dragOffX = e.globalX - container.x;
+                            self.dragOffY = e.globalY - container.y;
+                            container.alpha = 0.7;
                         });
+
+                        app.stage.on('pointermove', (e) => {
+                            if (!self.dragTarget) return;
+                            self.dragTarget.x = e.globalX - self.dragOffX;
+                            self.dragTarget.y = e.globalY - self.dragOffY;
+                        });
+
+                        container.on('pointerup', () => {
+                            self.endDrag();
+                        });
+                        container.on('pointerupoutside', () => {
+                            self.endDrag();
+                        });
+
+                        app.stage.addChild(container);
+
+                        bSprites.push({ type: b.type, container, level: b.level, bx, by, size });
+                    });
+
+                    this.builtSprites = bSprites;
+
+                    // --- NPCs ---
+                    this.npcs = [];
+
+                    // Helper to create an NPC with movement path
+                    const addNpc = (fromSprite, toPositions, color, drawFn) => {
+                        if (!fromSprite) return;
+                        toPositions.forEach(tp => {
+                            const dot = new PIXI.Graphics();
+                            drawFn(dot);
+                            dot.x = fromSprite.container.x;
+                            dot.y = fromSprite.container.y;
+                            app.stage.addChild(dot);
+                            this.npcs.push({
+                                gfx: dot,
+                                fromX: fromSprite.container.x, fromY: fromSprite.container.y,
+                                toX: tp.x, toY: tp.y,
+                                progress: Math.random(),
+                                speed: 0.003 + Math.random() * 0.004,
+                                paused: false, pauseTimer: 0,
+                                wobble: Math.random() * Math.PI * 2,
+                            });
+                        });
+                    };
+
+                    const drawWoodcutter = (g) => {
+                        g.beginFill(0x8B4513); g.drawCircle(0, 0, 3); g.endFill();
+                        const ax = new PIXI.Graphics();
+                        ax.lineStyle(1, 0x654321); ax.moveTo(-1, -2); ax.lineTo(1, 2); ax.moveTo(1, -2); ax.lineTo(-1, 2);
+                        g.addChild(ax);
+                    };
+                    const drawFarmer = (g) => {
+                        g.beginFill(0xDAA520); g.drawCircle(0, 0, 3); g.endFill();
+                        const fork = new PIXI.Graphics();
+                        fork.lineStyle(1, 0x8B7355); fork.moveTo(0, -3); fork.lineTo(0, 3);
+                        fork.moveTo(-1, -3); fork.lineTo(1, -3);
+                        g.addChild(fork);
+                    };
+                    const drawMiner = (g) => {
+                        g.beginFill(0x888888); g.drawCircle(0, 0, 3); g.endFill();
+                        const pick = new PIXI.Graphics();
+                        pick.lineStyle(1, 0x444444); pick.moveTo(-2, 1); pick.lineTo(2, -1);
+                        pick.moveTo(-1, 1); pick.lineTo(0, 3);
+                        g.addChild(pick);
+                    };
+                    const drawSmelter = (g) => {
+                        g.beginFill(0xCC5500); g.drawCircle(0, 0, 3); g.endFill();
+                        const ham = new PIXI.Graphics();
+                        ham.lineStyle(1, 0x444444); ham.moveTo(0, -2); ham.lineTo(0, 3);
+                        ham.moveTo(-2, -2); ham.lineTo(2, -2);
+                        g.addChild(ham);
+                    };
+                    const drawTrader = (g) => {
+                        g.beginFill(0x4488CC); g.drawCircle(0, 0, 3); g.endFill();
+                        const bag = new PIXI.Graphics();
+                        bag.beginFill(0x8B4513); bag.drawCircle(0, 1, 1.5); bag.endFill();
+                        g.addChild(bag);
+                    };
+
+                    const lm = bSprites.find(s => s.type === 'lumber_mill');
+                    const farm = bSprites.find(s => s.type === 'farm');
+                    const quarry = bSprites.find(s => s.type === 'quarry');
+                    const smelter = bSprites.find(s => s.type === 'smelter');
+                    const market = bSprites.find(s => s.type === 'market');
+                    const br = bSprites.find(s => s.type === 'barracks');
+
+                    addNpc(lm, [
+                        { x: cx - this.wallRadius - 30, y: cy - 10 },
+                        { x: cx + this.wallRadius + 30, y: cy },
+                    ], 0x8B4513, drawWoodcutter);
+
+                    addNpc(farm, [
+                        { x: cx - this.wallRadius - 25, y: cy - 20 },
+                    ], 0xDAA520, drawFarmer);
+
+                    addNpc(quarry, [
+                        { x: cx - this.wallRadius - 20, y: cy + 15 },
+                        { x: cx + this.wallRadius + 25, y: cy - 15 },
+                    ], 0x888888, drawMiner);
+
+                    addNpc(smelter, [
+                        { x: smelter.container.x + 20, y: smelter.container.y + 10 },
+                    ], 0xCC5500, drawSmelter);
+
+                    addNpc(market, [
+                        { x: market ? market.container.x - 15 : cx, y: market ? market.container.y + 15 : cy },
+                    ], 0x4488CC, drawTrader);
+
+                    // --- Army formation ---
+                    if (br) {
+                        const offsetY = br.level >= 2 ? 22 : 16;
+                        for (let r = 0; r < 3; r++) {
+                            for (let c = 0; c < 3; c++) {
+                                const s = new PIXI.Graphics();
+                                s.beginFill(0xcc4444); s.drawRect(-2, -3, 4, 6); s.endFill();
+                                s.beginFill(0x888888); s.drawCircle(0, 0, 1.5); s.endFill();
+                                s.x = br.container.x + (c - 1) * 8;
+                                s.y = br.container.y + offsetY + r * 8;
+                                app.stage.addChild(s);
+                                this.soldiers.push({ gfx: s, baseX: s.x, baseY: s.y });
+                            }
+                        }
                     }
 
-                    this.svg = `<svg viewBox="0 0 400 250" class="w-full h-full">
-                        <defs>
-                            <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="0%" stop-color="#1a1a2e"/>
-                                <stop offset="100%" stop-color="#16213e"/>
-                            </linearGradient>
-                            <linearGradient id="ground" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="0%" stop-color="#3a7d1e"/>
-                                <stop offset="100%" stop-color="#2d5016"/>
-                            </linearGradient>
-                        </defs>
-                        <rect x="0" y="0" width="400" height="180" fill="url(#sky)"/>
-                        <rect x="0" y="180" width="400" height="70" fill="url(#ground)"/>
-                        <circle cx="40" cy="30" r="1" fill="white" opacity="0.7"/>
-                        <circle cx="120" cy="15" r="1" fill="white" opacity="0.6"/>
-                        <circle cx="200" cy="25" r="1.5" fill="white" opacity="0.8"/>
-                        <circle cx="300" cy="10" r="1" fill="white" opacity="0.5"/>
-                        <circle cx="360" cy="35" r="1" fill="white" opacity="0.7"/>
-                        <circle cx="80" cy="50" r="1" fill="white" opacity="0.4"/>
-                        <circle cx="250" cy="40" r="1" fill="white" opacity="0.6"/>
-                        <circle cx="340" cy="55" r="1" fill="white" opacity="0.5"/>
-                        ${buildingsHtml}
-                        <text x="200" y="225" text-anchor="middle" fill="#e0e0e0" font-size="14" font-weight="bold">${cityName}</text>
-                        <text x="200" y="242" text-anchor="middle" fill="#a0a0a0" font-size="10">${tileX}, ${tileY}</text>
-                    </svg>`;
+                    // --- City name ---
+                    const title = new PIXI.Text(cityName, { fontSize: 12, fill: '#fff', fontFamily: 'monospace', fontWeight: 'bold' });
+                    title.anchor.set(0.5, 1); title.x = cx; title.y = H - 6;
+                    app.stage.addChild(title);
+
+                    this.startLoop();
+                },
+
+                drawWall() {
+                    const g = this.wallGfx;
+                    g.clear();
+                    const cx = this.cx, cy = this.cy;
+                    if (this.wallLevel > 0) {
+                        const thickness = 2 + this.wallLevel * 3;
+                        const t = Math.min(1, (this.wallLevel - 1) / 4);
+                        const r = Math.round(139 * (1 - t) + 128 * t);
+                        const g2 = Math.round(90 * (1 - t) + 128 * t);
+                        const b = Math.round(43 * (1 - t) + 128 * t);
+                        g.lineStyle(thickness, (r << 16) | (g2 << 8) | b, 0.85);
+                    } else {
+                        g.lineStyle(1, 0x7a5a3a, 0.25);
+                    }
+                    g.drawCircle(cx, cy, this.wallRadius);
+                },
+
+                endDrag() {
+                    if (!this.dragTarget) return;
+                    this.dragTarget.alpha = 1;
+                    this.dragTarget = null;
+                    this.dirty = true;
+                },
+
+                async savePositions() {
+                    this.saving = true;
+                    const positions = this.builtSprites.map(s => ({
+                        type: s.type,
+                        pos_x: Math.round(s.container.x),
+                        pos_y: Math.round(s.container.y),
+                    }));
+                    try {
+                        const res = await fetch(saveUrl, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
+                            body: JSON.stringify({ positions }),
+                        });
+                        const d = await res.json();
+                        if (d.success) this.dirty = false;
+                    } catch(e) {}
+                    this.saving = false;
+                },
+
+                startLoop() {
+                    const loop = () => {
+                        if (this.destroyed) return;
+                        this.npcs.forEach(w => {
+                            if (w.paused) {
+                                w.pauseTimer--;
+                                if (w.pauseTimer <= 0) {
+                                    w.paused = false;
+                                    const tx = w.fromX; const ty = w.fromY;
+                                    w.fromX = w.toX; w.fromY = w.toY;
+                                    w.toX = tx; w.toY = ty;
+                                    w.progress = 0;
+                                }
+                                return;
+                            }
+                            w.progress += w.speed;
+                            if (w.progress >= 1) {
+                                w.progress = 1;
+                                w.paused = true;
+                                w.pauseTimer = 40 + Math.random() * 80;
+                            }
+                            const t = w.progress * w.progress * (3 - 2 * w.progress);
+                            w.gfx.x = w.fromX + (w.toX - w.fromX) * t;
+                            w.gfx.y = w.fromY + (w.toY - w.fromY) * t + Math.sin(w.wobble + Date.now() * 0.002) * 0.5;
+                        });
+                        this.soldiers.forEach(s => {
+                            s.gfx.x = s.baseX + Math.sin(Date.now() * 0.001 + s.baseY) * 0.3;
+                        });
+                        this.animId = requestAnimationFrame(loop);
+                    };
+                    this.animId = requestAnimationFrame(loop);
                 },
             };
         }

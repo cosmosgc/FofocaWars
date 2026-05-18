@@ -65,6 +65,8 @@ Route::middleware('auth')->group(function () {
     Route::post('/api/wars/{war}/cities/{city}/build', [ConstructionController::class, 'constructCity'])->name('api.wars.cities.build');
     Route::get('/api/wars/{war}/bases/{base}/buildings', [ConstructionController::class, 'baseBuildings'])->name('api.wars.bases.buildings');
     Route::post('/api/wars/{war}/bases/{base}/build', [ConstructionController::class, 'constructBase'])->name('api.wars.bases.build');
+    Route::post('/api/wars/{war}/cities/{city}/buildings/save-positions', [ConstructionController::class, 'saveCityPositions'])->name('api.wars.cities.buildings.save-positions');
+    Route::post('/api/wars/{war}/bases/{base}/buildings/save-positions', [ConstructionController::class, 'saveBasePositions'])->name('api.wars.bases.buildings.save-positions');
     Route::get('/api/wars/{war}/armies/movements', [\App\Http\Controllers\Api\ArmyController::class, 'movements'])->name('api.wars.armies.movements');
     Route::get('/api/wars/{war}/armies/map-movements', [\App\Http\Controllers\Api\ArmyController::class, 'mapMovements'])->name('api.wars.armies.map-movements');
     Route::get('/api/wars/{war}/unit-types', [\App\Http\Controllers\Api\ArmyController::class, 'unitTypes'])->name('api.wars.unit-types');

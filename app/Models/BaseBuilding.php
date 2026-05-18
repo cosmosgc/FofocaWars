@@ -10,7 +10,7 @@ class BaseBuilding extends Model
     protected $table = 'base_buildings';
 
     protected $fillable = [
-        'base_id', 'type', 'level', 'finishes_at',
+        'base_id', 'type', 'level', 'pos_x', 'pos_y', 'finishes_at',
     ];
 
     protected function casts(): array
@@ -18,6 +18,8 @@ class BaseBuilding extends Model
         return [
             'finishes_at' => 'datetime',
             'level' => 'integer',
+            'pos_x' => 'integer',
+            'pos_y' => 'integer',
         ];
     }
 

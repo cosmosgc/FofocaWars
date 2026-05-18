@@ -48,6 +48,8 @@ class ConstructionController extends Controller
                 'next_costs' => !$maxed ? BuildingService::getCost($type, $level, (float) $war->construction_speed) : null,
                 'build_time' => !$maxed ? BuildingService::getBuildTime($type, $level, (float) $war->construction_speed) : null,
                 'effects' => $def['effects'],
+                'pos_x' => $b?->pos_x,
+                'pos_y' => $b?->pos_y,
             ];
         }
 
@@ -146,6 +148,8 @@ class ConstructionController extends Controller
                 'next_costs' => $nextLevel <= 5 ? BuildingService::getLevelCost($nextLevel, (float) $war->construction_speed) : null,
                 'build_time' => $nextLevel <= 5 ? BuildingService::getLevelBuildTime($nextLevel, (float) $war->construction_speed) : null,
                 'effects' => $def['effects'],
+                'pos_x' => $b?->pos_x,
+                'pos_y' => $b?->pos_y,
             ];
         }
 
@@ -218,5 +222,55 @@ class ConstructionController extends Controller
             'success' => true,
             'message' => __('Construction started!'),
         ]);
+    }
+
+    public function saveCityPositions(War $war, City $city, Request $request)
+    {
+        $player = WarPlayer::where('war_id', $war->id)
+            ->where('user_id', Auth::id())
+            ->firstOrFail();
+
+        abort_if($city->war_id !== $war->id || $city->owner_id !== $player->id, 403);
+
+        $validated = $request->validate([
+            'positions' => 'required|array',
+            'positions.*.type' => 'required|string',
+            'positions.*.pos_x' => 'nullable|integer',
+            'positions.*.pos_y' => 'nullable|integer',
+        ]);
+
+        foreach ($validated['positions'] as $pos) {
+            $city->buildings()->where('type', $pos['type'])->update([
+                'pos_x' => $pos['pos_x'],
+                'pos_y' => $pos['pos_y'],
+            ]);
+        }
+
+        return response()->json(['success' => true]);
+    }
+
+    public function saveBasePositions(War $war, Base $base, Request $request)
+    {
+        $player = WarPlayer::where('war_id', $war->id)
+            ->where('user_id', Auth::id())
+            ->firstOrFail();
+
+        abort_if($base->war_id !== $war->id || $base->owner_id !== $player->id, 403);
+
+        $validated = $request->validate([
+            'positions' => 'required|array',
+            'positions.*.type' => 'required|string',
+            'positions.*.pos_x' => 'nullable|integer',
+            'positions.*.pos_y' => 'nullable|integer',
+        ]);
+
+        foreach ($validated['positions'] as $pos) {
+            $base->buildings()->where('type', $pos['type'])->update([
+                'pos_x' => $pos['pos_x'],
+                'pos_y' => $pos['pos_y'],
+            ]);
+        }
+
+        return response()->json(['success' => true]);
     }
 }

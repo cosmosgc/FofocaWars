@@ -80,20 +80,26 @@
             </div>
 
             <div class="bg-white dark:bg-gray-800 overflow-hidden shadow-sm sm:rounded-lg"
-                 x-data="basePreview('{{ route('api.wars.bases.buildings', [$war, $base]) }}', '{{ $base->name }}')"
+                 x-data="basePreviewPixi('{{ route('api.wars.bases.buildings', [$war, $base]) }}', '{{ route('api.wars.bases.buildings.save-positions', [$war, $base]) }}', '{{ $base->name }}')"
                  x-init="init()">
                 <div class="p-6">
                     <div class="flex items-center justify-between mb-4">
                         <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">{{ __('Base Preview') }}</h3>
+                        <button x-show="dirty" @click="savePositions()" :disabled="saving"
+                                class="px-3 py-1 text-xs font-medium text-white bg-green-600 rounded hover:bg-green-500 disabled:opacity-50">
+                            <span x-text="saving ? '{{ __('Saving...') }}' : '{{ __('Save Layout') }}'"></span>
+                        </button>
                     </div>
 
                     <template x-if="loading">
                         <p class="text-sm text-gray-400">{{ __('Loading...') }}</p>
                     </template>
 
-                    <div class="relative w-full aspect-video bg-gray-900 rounded-lg overflow-hidden border border-gray-700"
+                    <div class="relative w-full aspect-video bg-gray-900 rounded-lg overflow-hidden border border-gray-700 pixi-preview"
                          x-show="!loading">
-                        <div class="absolute inset-0 flex items-center justify-center" x-html="svg"></div>
+                        <div x-show="dirty" class="absolute top-2 left-2 bg-yellow-500 text-black text-xs px-2 py-0.5 rounded font-medium z-10 pointer-events-none">
+                            {{ __('Unsaved') }}
+                        </div>
                     </div>
                 </div>
             </div>
@@ -173,64 +179,237 @@
     </div>
 
     @push('scripts')
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/7.3.2/pixi.min.js"></script>
     <script>
-        function basePreview(listUrl, baseName) {
+        function basePreviewPixi(listUrl, saveUrl, baseName) {
             return {
-                buildings: [], loading: true, svg: '',
-                async init() { await this.fetch(); setInterval(() => this.fetch(), 15000); },
+                buildings: [], loading: true, app: null, guards: [], animId: null,
+                destroyed: false, dirty: false, saving: false, builtSprites: [],
+                dragTarget: null, dragOffX: 0, dragOffY: 0, cx: 0, cy: 0,
+
+                async init() {
+                    await this.fetch();
+                    this.$nextTick(() => this.initPixi());
+                },
+
+                destroy() {
+                    this.destroyed = true;
+                    if (this.animId) cancelAnimationFrame(this.animId);
+                    if (this.app && !this.app.destroyed) {
+                        this.app.destroy(true, { children: true, texture: true });
+                    }
+                },
+
                 async fetch() {
                     try {
                         const r = await fetch(listUrl);
                         const d = await r.json();
                         this.buildings = d.buildings;
-                        this.renderSvg();
                         this.loading = false;
                     } catch(e) {}
                 },
-                renderSvg() {
-                    const colors = ['#8B4513', '#4682B4', '#6B8E23', '#B22222', '#DAA520'];
-                    const positions = [
-                        { x: 120, y: 155 }, { x: 150, y: 140 },
-                        { x: 250, y: 140 }, { x: 280, y: 155 },
-                    ];
 
-                    const withLevel = this.buildings.filter(b => b.level > 0);
-                    let buildingsHtml = '';
+                initPixi() {
+                    const el = this.$el.querySelector('.pixi-preview');
+                    if (!el || typeof PIXI === 'undefined' || el.clientWidth === 0) return;
 
-                    withLevel.forEach((b, i) => {
-                        const c = colors[i % colors.length];
-                        const p = positions[i] || { x: 200 + (i * 20), y: 160 };
-                        const w = 14 + (b.level * 2);
-                        const h = 12 + (b.level * 3);
+                    const w = el.clientWidth;
+                    const h = el.clientHeight;
 
-                        buildingsHtml += `<g transform="translate(${p.x},${p.y})">`;
-                        buildingsHtml += `<rect x="${-w/2}" y="${-h}" width="${w}" height="${h}" fill="${c}" rx="2" stroke="#ffd700" stroke-width="1"/>`;
-                        buildingsHtml += `<text x="0" y="${-h/2 + 2}" text-anchor="middle" fill="white" font-size="7" font-weight="bold">Lv${b.level}</text>`;
-                        buildingsHtml += `</g>`;
+                    this.app = new PIXI.Application({
+                        width: w, height: h,
+                        backgroundColor: 0x2d4a1e,
+                        antialias: true,
+                        resolution: window.devicePixelRatio || 1,
+                        autoDensity: true,
                     });
 
-                    this.svg = `<svg viewBox="0 0 400 250" class="w-full h-full">
-                        <defs>
-                            <linearGradient id="sky-b" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="0%" stop-color="#1a1a2e"/>
-                                <stop offset="100%" stop-color="#2d1b4e"/>
-                            </linearGradient>
-                            <linearGradient id="ground-b" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="0%" stop-color="#3a5a1e"/>
-                                <stop offset="100%" stop-color="#2d4016"/>
-                            </linearGradient>
-                        </defs>
-                        <rect x="0" y="0" width="400" height="180" fill="url(#sky-b)"/>
-                        <rect x="0" y="180" width="400" height="70" fill="url(#ground-b)"/>
-                        <circle cx="50" cy="20" r="1" fill="white" opacity="0.6"/>
-                        <circle cx="150" cy="35" r="1" fill="white" opacity="0.5"/>
-                        <circle cx="280" cy="15" r="1.5" fill="white" opacity="0.7"/>
-                        <circle cx="350" cy="30" r="1" fill="white" opacity="0.4"/>
-                        <line x1="200" y1="120" x2="200" y2="190" stroke="#888" stroke-width="2"/>
-                        <text x="200" y="195" text-anchor="middle" fill="#ccc" font-size="8">${baseName}</text>
-                        <rect x="160" y="170" width="80" height="14" fill="#555" rx="3"/>
-                        ${buildingsHtml}
-                    </svg>`;
+                    el.appendChild(this.app.view);
+                    this.drawScene();
+                },
+
+                drawScene() {
+                    const app = this.app;
+                    const W = app.screen.width;
+                    const H = app.screen.height;
+                    this.cx = W / 2; this.cy = H / 2;
+                    const cx = this.cx, cy = this.cy;
+                    const tileSize = Math.max(16, Math.floor(W / 20));
+
+                    const grid = new PIXI.Graphics();
+                    for (let x = 0; x < W; x += tileSize) {
+                        for (let y = 0; y < H; y += tileSize) {
+                            const shade = ((x / tileSize + y / tileSize) % 2 === 0) ? 0x3a6a1e : 0x2d5a14;
+                            grid.beginFill(shade);
+                            grid.drawRect(x, y, tileSize, tileSize);
+                            grid.endFill();
+                        }
+                    }
+                    app.stage.addChild(grid);
+
+                    const built = this.buildings.filter(b => b.level > 0);
+
+                    // --- Base HQ at center ---
+                    const hqSize = 18 + built.length * 2;
+                    const hq = new PIXI.Graphics();
+                    hq.beginFill(0x556677, 0.9);
+                    hq.drawRoundedRect(-hqSize / 2, -hqSize / 2, hqSize, hqSize, 3);
+                    hq.endFill();
+                    hq.lineStyle(2, 0x88aacc, 0.7);
+                    hq.drawRoundedRect(-hqSize / 2, -hqSize / 2, hqSize, hqSize, 3);
+                    hq.x = cx; hq.y = cy;
+                    app.stage.addChild(hq);
+
+                    const hqLabel = new PIXI.Text(baseName, { fontSize: 10, fill: '#fff', fontFamily: 'monospace', fontWeight: 'bold' });
+                    hqLabel.anchor.set(0.5, 1);
+                    hqLabel.x = cx; hqLabel.y = cy + hqSize / 2 + 4;
+                    app.stage.addChild(hqLabel);
+
+                    // --- Wall/fence circle ---
+                    const wallLevel = built.find(b => b.type === 'base_wall')?.level || 0;
+                    const wallRadius = 80 + built.length * 6;
+                    const fence = new PIXI.Graphics();
+                    if (wallLevel > 0) {
+                        const t = Math.min(1, (wallLevel - 1) / 4);
+                        const r = Math.round(139 * (1 - t) + 128 * t);
+                        const g = Math.round(90 * (1 - t) + 128 * t);
+                        const b = Math.round(43 * (1 - t) + 128 * t);
+                        fence.lineStyle(2 + wallLevel * 2, (r << 16) | (g << 8) | b, 0.8);
+                    } else {
+                        fence.lineStyle(1, 0x7a5a3a, 0.2);
+                    }
+                    fence.drawCircle(cx, cy, wallRadius);
+                    app.stage.addChild(fence);
+
+                    // --- Buildings in a ring around HQ ---
+                    const colors = [0x8B4513, 0x4682B4, 0x6B8E23, 0xB22222, 0xDAA520, 0x7B68EE];
+                    const self = this;
+                    this.builtSprites = [];
+
+                    built.forEach((b, i) => {
+                        const size = 10 + b.level * 2;
+                        const col = colors[i % colors.length];
+
+                        let bx = b.pos_x != null ? b.pos_x : 0;
+                        let by = b.pos_y != null ? b.pos_y : 0;
+                        if (b.pos_x == null) {
+                            const angle = (i / built.length) * Math.PI * 2 - Math.PI / 2;
+                            const dist = 35 + Math.min(i, 5) * 5;
+                            bx = cx + Math.cos(angle) * dist;
+                            by = cy + Math.sin(angle) * dist;
+                        }
+
+                        const container = new PIXI.Container();
+                        container.x = bx; container.y = by;
+
+                        const gfx = new PIXI.Graphics();
+                        gfx.beginFill(col, 0.9);
+                        gfx.drawRoundedRect(-size / 2, -size / 2, size, size, 2);
+                        gfx.endFill();
+                        container.addChild(gfx);
+
+                        const lt = new PIXI.Text(b.name || b.type, { fontSize: 8, fill: '#ddd', fontFamily: 'monospace' });
+                        lt.anchor.set(0.5, 0); lt.y = size / 2 + 2;
+                        container.addChild(lt);
+
+                        const lv = new PIXI.Text('Lv' + b.level, { fontSize: 7, fill: '#ffd700', fontFamily: 'monospace' });
+                        lv.anchor.set(0.5, 1); lv.y = -size / 2 - 2;
+                        container.addChild(lv);
+
+                        container.eventMode = 'static';
+                        container.cursor = 'move';
+                        container.on('pointerdown', (e) => {
+                            self.dragTarget = container;
+                            self.dragOffX = e.globalX - container.x;
+                            self.dragOffY = e.globalY - container.y;
+                            container.alpha = 0.7;
+                        });
+                        container.on('pointerup', () => self.endDrag());
+                        container.on('pointerupoutside', () => self.endDrag());
+
+                        app.stage.on('pointermove', (e) => {
+                            if (!self.dragTarget) return;
+                            self.dragTarget.x = e.globalX - self.dragOffX;
+                            self.dragTarget.y = e.globalY - self.dragOffY;
+                        });
+
+                        app.stage.addChild(container);
+                        this.builtSprites.push({ type: b.type, container });
+                    });
+
+                    // --- Guard NPCs patrolling ---
+                    const numGuards = Math.max(0, Math.min(4, built.length));
+                    for (let i = 0; i < numGuards; i++) {
+                        const guard = new PIXI.Graphics();
+                        guard.beginFill(0xcc4444); guard.drawRect(-2, -3, 4, 6); guard.endFill();
+                        guard.beginFill(0x884422); guard.drawCircle(0, -2, 1.5); guard.endFill();
+                        const startAngle = (i / numGuards) * Math.PI * 2;
+                        guard.x = cx + Math.cos(startAngle) * (wallRadius - 10);
+                        guard.y = cy + Math.sin(startAngle) * (wallRadius - 10);
+                        app.stage.addChild(guard);
+
+                        this.guards.push({
+                            gfx: guard, cx, cy, radius: wallRadius - 10,
+                            angle: startAngle, speed: 0.003 + Math.random() * 0.002,
+                        });
+                    }
+
+                    // --- Scouts patrolling outside ---
+                    for (let i = 0; i < Math.min(2, built.length); i++) {
+                        const scout = new PIXI.Graphics();
+                        scout.beginFill(0x4488cc); scout.drawCircle(0, 0, 2); scout.endFill();
+                        scout.beginFill(0x2266aa); scout.drawRect(-1, -2, 2, 4); scout.endFill();
+                        const sa = (i / 2) * Math.PI * 2;
+                        scout.x = cx + Math.cos(sa) * (wallRadius + 20);
+                        scout.y = cy + Math.sin(sa) * (wallRadius + 20);
+                        app.stage.addChild(scout);
+
+                        this.guards.push({
+                            gfx: scout, cx, cy, radius: wallRadius + 20,
+                            angle: sa + 0.5, speed: 0.002 + Math.random() * 0.002,
+                        });
+                    }
+
+                    this.startLoop();
+                },
+
+                endDrag() {
+                    if (!this.dragTarget) return;
+                    this.dragTarget.alpha = 1;
+                    this.dragTarget = null;
+                    this.dirty = true;
+                },
+
+                async savePositions() {
+                    this.saving = true;
+                    const positions = this.builtSprites.map(s => ({
+                        type: s.type,
+                        pos_x: Math.round(s.container.x),
+                        pos_y: Math.round(s.container.y),
+                    }));
+                    try {
+                        const res = await fetch(saveUrl, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
+                            body: JSON.stringify({ positions }),
+                        });
+                        const d = await res.json();
+                        if (d.success) this.dirty = false;
+                    } catch(e) {}
+                    this.saving = false;
+                },
+
+                startLoop() {
+                    const loop = () => {
+                        if (this.destroyed) return;
+                        this.guards.forEach(g => {
+                            g.angle += g.speed;
+                            g.gfx.x = g.cx + Math.cos(g.angle) * g.radius;
+                            g.gfx.y = g.cy + Math.sin(g.angle) * g.radius;
+                        });
+                        this.animId = requestAnimationFrame(loop);
+                    };
+                    this.animId = requestAnimationFrame(loop);
                 },
             };
         }
