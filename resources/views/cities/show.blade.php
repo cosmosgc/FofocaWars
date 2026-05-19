@@ -279,7 +279,7 @@
             return {
                 buildings: [], loading: true, app: null, npcs: [], soldiers: [],
                 animId: null, destroyed: false, dirty: false, saving: false,
-                builtSprites: [], wallGfx: null, dragTarget: null, dragOffX: 0, dragOffY: 0,
+                builtSprites: [], wallGfx: null,
                 wallLevel: 0, wallRadius: 100, cx: 0, cy: 0,
 
                 async init() {
@@ -346,10 +346,15 @@
 
                     const built = this.buildings.filter(b => b.level > 0);
 
+                    // --- Grid layout for buildings ---
+                    const bCellSize = 44;
+                    const bGridCols = Math.ceil(Math.sqrt(built.length)) || 1;
+                    const bGridRows = Math.ceil(built.length / bGridCols) || 1;
+
                     // --- Wall circle ---
                     const wallB = built.find(b => b.type === 'wall');
                     this.wallLevel = wallB ? wallB.level : 0;
-                    this.wallRadius = 100 + built.length * 4;
+                    this.wallRadius = Math.max(bGridCols, bGridRows) * bCellSize / 2 + 50;
                     this.wallGfx = new PIXI.Graphics();
                     this.drawWall();
                     app.stage.addChild(this.wallGfx);
@@ -398,6 +403,9 @@
                     ];
 
                     const bSprites = [];
+                    const gridStartX = cx - (bGridCols - 1) * bCellSize / 2;
+                    const gridStartY = cy - (bGridRows - 1) * bCellSize / 2;
+                    const occupied = {};
 
                     built.forEach(b => {
                         const d = defs.find(x => x.type === b.type);
@@ -405,14 +413,24 @@
 
                         const size = 10 + b.level * 2;
 
-                        let bx = b.pos_x != null ? b.pos_x : 0;
-                        let by = b.pos_y != null ? b.pos_y : 0;
-                        if (b.pos_x == null) {
-                            const idx = defs.indexOf(d);
-                            const angle = (idx / defs.length) * Math.PI * 2 - Math.PI / 2;
-                            const dist = 35 + (idx % 5) * 10;
-                            bx = cx + Math.cos(angle) * dist;
-                            by = cy + Math.sin(angle) * dist;
+                        let bx, by;
+                        if (b.pos_x != null && b.pos_y != null) {
+                            bx = b.pos_x;
+                            by = b.pos_y;
+                        } else {
+                            let col = 0, row = 0, found = false;
+                            for (let r = 0; r < bGridRows && !found; r++) {
+                                for (let c = 0; c < bGridCols && !found; c++) {
+                                    const key = c + ',' + r;
+                                    if (!occupied[key]) {
+                                        col = c; row = r;
+                                        occupied[key] = true;
+                                        found = true;
+                                    }
+                                }
+                            }
+                            bx = gridStartX + col * bCellSize;
+                            by = gridStartY + row * bCellSize;
                         }
 
                         const container = new PIXI.Container();
@@ -423,7 +441,6 @@
                         gfx.beginFill(d.color, 0.9);
                         gfx.drawRoundedRect(-size / 2, -size / 2, size, size, 2);
                         gfx.endFill();
-                        gfx.hitArea = new PIXI.Rectangle(-size / 2 - 4, -size / 2 - 4, size + 8, size + 8);
                         container.addChild(gfx);
 
                         const lt = new PIXI.Text(d.label, { fontSize: 9, fill: '#eee', fontFamily: 'monospace', align: 'center' });
@@ -433,30 +450,6 @@
                         const lv = new PIXI.Text('Lv' + b.level, { fontSize: 8, fill: '#ffd700', fontFamily: 'monospace', align: 'center' });
                         lv.anchor.set(0.5, 1); lv.y = -size / 2 - 2;
                         container.addChild(lv);
-
-                        // --- Drag setup ---
-                        container.eventMode = 'static';
-                        container.cursor = 'move';
-                        const self = this;
-                        container.on('pointerdown', (e) => {
-                            self.dragTarget = container;
-                            self.dragOffX = e.globalX - container.x;
-                            self.dragOffY = e.globalY - container.y;
-                            container.alpha = 0.7;
-                        });
-
-                        app.stage.on('pointermove', (e) => {
-                            if (!self.dragTarget) return;
-                            self.dragTarget.x = e.globalX - self.dragOffX;
-                            self.dragTarget.y = e.globalY - self.dragOffY;
-                        });
-
-                        container.on('pointerup', () => {
-                            self.endDrag();
-                        });
-                        container.on('pointerupoutside', () => {
-                            self.endDrag();
-                        });
 
                         app.stage.addChild(container);
 
@@ -591,13 +584,6 @@
                         g.lineStyle(1, 0x7a5a3a, 0.25);
                     }
                     g.drawCircle(cx, cy, this.wallRadius);
-                },
-
-                endDrag() {
-                    if (!this.dragTarget) return;
-                    this.dragTarget.alpha = 1;
-                    this.dragTarget = null;
-                    this.dirty = true;
                 },
 
                 async savePositions() {
